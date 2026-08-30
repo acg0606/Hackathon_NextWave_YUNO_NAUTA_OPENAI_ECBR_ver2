@@ -130,6 +130,50 @@ describe('semantic UI compiler', () => {
     ]);
   });
 
+  it('publishes the dispatch trajectory and agent highlight on the progress surface', () => {
+    const step = makeStep({
+      id: 'explain-disruption',
+      title: 'Explain the operational disruption',
+      kind: 'monitor',
+      owner: 'agent',
+      capabilities: ['route.view', 'incident.explain', 'audit.view'],
+    });
+    const snapshot = makeSnapshot(step, {
+      publicAgentSummary: {
+        summary: 'The planned corridor is closed.',
+        evidence: ['port closure'],
+        providerMode: 'live',
+        model: 'gpt-5-mini',
+      },
+      artifacts: {
+        shipment: artifact('shipment', 'shipment', {
+          origin: 'Shanghai',
+          destination: 'Gaziantep',
+          plannedRoute: ['Shanghai', 'Iskenderun', 'Gaziantep'],
+          route: ['Shanghai', 'Mersin', 'Gaziantep'],
+          disruption: 'Port closed',
+          state: 'disrupted',
+        }),
+      },
+    });
+
+    const spec = compileRuntimeUI(makeFlow(step), snapshot);
+    const progress = spec.sections.find((section) => section.type === 'progress');
+    expect(progress?.data.trajectoryShift).toMatchObject({
+      kind: 'disruption',
+      from: ['Shanghai', 'Iskenderun', 'Gaziantep'],
+      to: ['Shanghai', 'Mersin', 'Gaziantep'],
+      agentLabel: 'Ari · gpt-5-mini',
+    });
+    expect(progress?.data.items).toEqual([
+      expect.objectContaining({
+        stepId: 'explain-disruption',
+        owner: 'agent',
+        agentHighlighted: true,
+      }),
+    ]);
+  });
+
   it('renders prepared booking and Bill of Lading artifacts as documents', () => {
     const step = makeStep({ capabilities: ['booking.view', 'document.view', 'quote.view'] });
     const snapshot = makeSnapshot(step, {

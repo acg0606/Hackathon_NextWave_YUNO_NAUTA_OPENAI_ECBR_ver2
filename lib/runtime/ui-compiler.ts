@@ -10,6 +10,7 @@ import type {
   StepDefinition,
   TruthClassification,
 } from './contracts';
+import { buildDispatchJourney } from './dispatch-journey';
 import {
   flowDefinitionSchema,
   runSnapshotSchema,
@@ -261,21 +262,21 @@ function routeData(snapshot: RunSnapshot): JsonObject {
 }
 
 function progressData(flow: FlowDefinition, snapshot: RunSnapshot): JsonObject {
+  const journey = buildDispatchJourney(flow, snapshot);
   return {
-    items: flow.steps.map((step) => ({
-      stepId: step.id,
+    items: journey.steps.map((step) => ({
+      stepId: step.stepId,
       title: step.title,
       owner: step.owner,
-      status: snapshot.completedStepIds.includes(step.id)
-        ? 'completed'
-        : snapshot.skippedStepIds.includes(step.id)
-          ? 'skipped'
-          : snapshot.currentStepId === step.id
-            ? snapshot.status
-            : 'pending',
+      description: step.description,
+      status: step.status,
+      agentHighlighted: step.agentHighlighted,
     })),
     currentStepId: snapshot.currentStepId,
     revision: snapshot.revision,
+    ...(journey.trajectoryShift
+      ? { trajectoryShift: journey.trajectoryShift }
+      : {}),
   };
 }
 

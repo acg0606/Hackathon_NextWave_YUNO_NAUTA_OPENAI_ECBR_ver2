@@ -972,7 +972,7 @@ button { color: inherit; }
 .runtime-operating-surface {
   position: absolute;
   z-index: 10;
-  inset: 74px 0 104px;
+  inset: 74px 0 var(--dispatch-rail-height, 156px);
   pointer-events: none;
 }
 
@@ -1086,12 +1086,29 @@ button { color: inherit; }
 .runtime-progress-list strong { font-size: 9px; }
 .runtime-milestones small,
 .runtime-progress-list small { margin-top: 3px; color: var(--runtime-muted); font-size: 7px; text-transform: capitalize; }
-.runtime-progress-list .is-pending > span { color: var(--runtime-muted); background: transparent; border: 1px solid var(--runtime-line); }
+.runtime-progress-list .is-pending > span,
+.runtime-progress-list .is-queued > span { color: var(--runtime-muted); background: transparent; border: 1px solid var(--runtime-line); }
 .runtime-progress-list .is-skipped > span { color: #352400; background: #ffe1a0; }
 .runtime-progress-list .is-awaiting_human > span,
-.runtime-progress-list .is-running > span { background: var(--amber); box-shadow: 0 0 14px rgb(255 176 0 / 34%); }
+.runtime-progress-list .is-waiting > span,
+.runtime-progress-list .is-running > span,
+.runtime-progress-list .is-current > span { background: var(--amber); box-shadow: 0 0 14px rgb(255 176 0 / 34%); }
+.runtime-progress-list .is-agent { background: color-mix(in srgb, var(--rose) 14%, transparent); box-shadow: inset 3px 0 0 var(--rose); }
+.runtime-progress-list .is-agent > span { color: #2a0610; background: var(--rose); box-shadow: 0 0 14px rgb(223 111 140 / 40%); }
+.runtime-progress-list .is-agent em { color: var(--rose); }
+.runtime-progress-list em { color: var(--runtime-muted); font-size: 8px; font-style: normal; font-weight: 760; letter-spacing: 0.08em; text-transform: uppercase; }
+.runtime-progress-list li > span svg { width: 12px; }
 .runtime-progress { height: 4px; overflow: hidden; background: rgb(245 244 238 / 12%); border-radius: 99px; }
 .runtime-progress > span { display: block; height: 100%; background: var(--scenario-accent); }
+.runtime-progress-shift { display: grid; gap: 6px; margin-bottom: 12px; padding: 10px 11px; background: color-mix(in srgb, var(--rose) 16%, rgb(245 244 238 / 5%)); border: 1px solid color-mix(in srgb, var(--rose) 46%, transparent); border-radius: 10px; }
+.runtime-progress-shift > span { display: inline-flex; align-items: center; gap: 6px; color: var(--rose); font-size: 8px; font-weight: 760; letter-spacing: 0.08em; text-transform: uppercase; }
+.runtime-progress-shift > span svg { width: 14px; }
+.runtime-progress-shift strong { font-size: 11px; line-height: 1.3; }
+.runtime-progress-shift p { margin: 0; color: var(--runtime-muted); font-size: 9px; line-height: 1.4; }
+.runtime-progress-shift ol { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 0; padding: 0; list-style: none; }
+.runtime-progress-shift li { display: grid; gap: 3px; }
+.runtime-progress-shift small { color: var(--runtime-muted); font-size: 7px; letter-spacing: 0.08em; text-transform: uppercase; }
+.runtime-progress-shift em { font-size: 10px; font-style: normal; line-height: 1.35; }
 .runtime-live-traffic { margin-top: 12px; padding: 11px; background: rgb(201 234 255 / 7%); border: 1px solid rgb(201 234 255 / 22%); border-radius: 10px; }
 .runtime-live-traffic > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .runtime-live-traffic > header > div { display: flex; align-items: center; gap: 6px; color: #c9eaff; font-size: 8px; font-weight: 760; letter-spacing: .08em; text-transform: uppercase; }
@@ -1392,6 +1409,12 @@ button { color: inherit; }
 .flow-mutation-lab__success { display: flex; align-items: center; gap: 6px; color: #063a2a; background: #c9f2df; }
 .flow-mutation-lab__success svg { width: 14px; }
 
+.route-runtime { --dispatch-rail-height: 156px; }
+.route-runtime:has(.runtime-flow-graph.is-shifted) { --dispatch-rail-height: 236px; }
+.runtime-event-feed,
+.flow-mutation-lab { bottom: calc(var(--dispatch-rail-height) + 12px); }
+.runtime-live-stamp { bottom: calc(var(--dispatch-rail-height) - 13px); }
+
 .runtime-flow-graph {
   position: fixed;
   z-index: 40;
@@ -1399,35 +1422,51 @@ button { color: inherit; }
   bottom: 0;
   left: 0;
   display: grid;
-  height: 104px;
-  grid-template-columns: 96px minmax(0, 1fr) 80px;
-  align-items: center;
+  min-height: var(--dispatch-rail-height);
+  grid-template-columns: 108px minmax(0, 1fr) 80px;
+  align-items: stretch;
   gap: 13px;
-  padding: 0 22px;
+  padding: 12px 22px;
   color: var(--white);
   background: rgb(2 5 10 / 89%);
   border-top: 1px solid rgb(245 244 238 / 20%);
   backdrop-filter: blur(18px);
 }
-.runtime-flow-graph__label { display: flex; flex-direction: column; gap: 4px; color: var(--amber); font-size: 7px; font-weight: 760; letter-spacing: 0.08em; text-transform: uppercase; }
+.runtime-flow-graph__label { display: flex; flex-direction: column; justify-content: center; gap: 4px; color: var(--amber); font-size: 7px; font-weight: 760; letter-spacing: 0.08em; text-transform: uppercase; }
 .runtime-flow-graph__label svg { width: 18px; }
+.runtime-flow-graph__label small { color: var(--runtime-muted); font-size: 8px; letter-spacing: 0.06em; }
+.runtime-flow-graph__body { display: grid; min-width: 0; align-content: center; gap: 8px; }
+.runtime-flow-graph__shift { display: grid; grid-template-columns: auto minmax(0, 1.2fr) minmax(220px, 1fr); align-items: center; gap: 12px; padding: 8px 10px; background: color-mix(in srgb, var(--rose) 16%, rgb(245 244 238 / 5%)); border: 1px solid color-mix(in srgb, var(--rose) 42%, transparent); border-radius: 10px; }
+.runtime-flow-graph__agent { display: inline-flex; align-items: center; gap: 6px; color: #2a0610; font-size: 8px; font-weight: 780; letter-spacing: 0.06em; text-transform: uppercase; background: var(--rose); border-radius: 999px; padding: 0 9px; min-height: 28px; }
+.runtime-flow-graph__agent svg { width: 13px; }
+.runtime-flow-graph__shift > div { min-width: 0; }
+.runtime-flow-graph__shift strong { display: block; font-size: 10px; line-height: 1.25; }
+.runtime-flow-graph__shift p { margin: 3px 0 0; overflow: hidden; color: var(--runtime-muted); font-size: 9px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.runtime-flow-graph__trajectory { display: grid; grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr); align-items: center; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.runtime-flow-graph__trajectory span { display: block; color: var(--runtime-muted); font-size: 7px; letter-spacing: 0.08em; text-transform: uppercase; }
+.runtime-flow-graph__trajectory strong { font-size: 9px; line-height: 1.3; }
+.runtime-flow-graph__trajectory svg { width: 16px; color: var(--rose); }
 .runtime-flow-graph__scroll { min-width: 0; overflow-x: auto; scrollbar-width: thin; }
 .runtime-flow-graph__track { position: relative; display: flex; min-width: max-content; padding: 0; margin: 0; list-style: none; }
 .runtime-flow-graph__track::before,
 .runtime-flow-graph__track::after { position: absolute; top: 15px; left: 15px; height: 1px; content: ''; }
 .runtime-flow-graph__track::before { right: 15px; background: rgb(245 244 238 / 20%); }
 .runtime-flow-graph__track::after { width: var(--flow-progress); max-width: calc(100% - 30px); background: var(--scenario-accent); box-shadow: 0 0 9px color-mix(in srgb, var(--scenario-accent) 70%, transparent); }
-.runtime-flow-graph__track li { position: relative; z-index: 1; display: grid; width: 145px; grid-template-columns: 30px minmax(0, 1fr); align-items: start; gap: 7px; padding-right: 10px; }
+.runtime-flow-graph__track li { position: relative; z-index: 1; display: grid; width: 168px; grid-template-columns: 30px minmax(0, 1fr); align-items: start; gap: 7px; padding: 0 10px 0 0; }
 .runtime-flow-graph__node { display: grid; width: 30px; height: 30px; place-items: center; color: var(--runtime-muted); font-size: 7px; font-weight: 750; background: #050a13; border: 1px solid currentColor; border-radius: 50%; }
 .runtime-flow-graph__node svg { width: 13px; }
 .runtime-flow-graph__track li > div { display: flex; min-width: 0; flex-direction: column; padding-top: 2px; }
-.runtime-flow-graph__track strong { overflow: hidden; font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
-.runtime-flow-graph__track small { margin-top: 4px; color: var(--runtime-muted); font-size: 6px; text-transform: capitalize; }
+.runtime-flow-graph__track em { color: var(--runtime-muted); font-size: 8px; font-style: normal; font-weight: 760; letter-spacing: 0.07em; text-transform: uppercase; }
+.runtime-flow-graph__track strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.runtime-flow-graph__track small { margin-top: 3px; color: var(--runtime-muted); font-size: 8px; }
 .runtime-flow-graph__track li.is-complete .runtime-flow-graph__node { color: #072e20; background: var(--green); border-color: var(--green); }
 .runtime-flow-graph__track li.is-current .runtime-flow-graph__node,
 .runtime-flow-graph__track li.is-waiting .runtime-flow-graph__node { color: #241600; background: var(--amber); border-color: var(--amber); box-shadow: 0 0 15px rgb(255 176 0 / 35%); }
 .runtime-flow-graph__track li.is-skipped .runtime-flow-graph__node { color: #412700; background: #ffe1a0; border-color: #ffe1a0; }
-.runtime-flow-graph__status { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.runtime-flow-graph__track li.is-agent { padding-top: 2px; padding-bottom: 2px; background: color-mix(in srgb, var(--rose) 16%, transparent); border-radius: 10px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rose) 50%, transparent); }
+.runtime-flow-graph__track li.is-agent .runtime-flow-graph__node { color: #2a0610; background: var(--rose); border-color: var(--rose); box-shadow: 0 0 16px rgb(223 111 140 / 42%); }
+.runtime-flow-graph__track li.is-agent em { color: var(--rose); }
+.runtime-flow-graph__status { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 4px; }
 .runtime-flow-graph__status span { color: var(--runtime-muted); font-size: 6px; text-transform: uppercase; }
 .runtime-flow-graph__status strong { color: var(--scenario-accent); font-size: 11px; font-variant-numeric: tabular-nums; }
 
@@ -1611,6 +1650,12 @@ button { color: inherit; }
 .flow-mutation-lab__error,
 .flow-mutation-lab__success,
 .runtime-flow-graph__track strong,
+.runtime-flow-graph__shift strong,
+.runtime-flow-graph__shift p,
+.runtime-flow-graph__trajectory strong,
+.runtime-progress-shift strong,
+.runtime-progress-shift p,
+.runtime-progress-shift em,
 .runtime-scenario-archive header p,
 .runtime-scenario-grid h3,
 .runtime-scenario-grid__actions a,
@@ -1634,14 +1679,12 @@ button { color: inherit; }
 @keyframes runtime-spin { to { transform: rotate(360deg); } }
 
 @media (max-height: 760px) and (min-width: 901px) {
-  .runtime-operating-surface { inset-bottom: 88px; }
+  .route-runtime { --dispatch-rail-height: 140px; }
+  .route-runtime:has(.runtime-flow-graph.is-shifted) { --dispatch-rail-height: 210px; }
   .runtime-renderer { top: 2%; max-height: 96%; padding: 14px; }
   .runtime-section { padding: 11px 0; }
   .runtime-section__body { margin-top: 9px; }
   .runtime-earth-stage { top: 8%; height: 64%; }
-  .runtime-flow-graph { height: 88px; }
-  .flow-mutation-lab,
-  .runtime-event-feed { bottom: 100px; }
 }
 
 @media (max-width: 1100px) {
@@ -1655,7 +1698,7 @@ button { color: inherit; }
 }
 
 @media (max-width: 900px) {
-  .route-runtime { min-height: 100dvh; padding-bottom: 88px; overflow-y: auto; }
+  .route-runtime { min-height: 100dvh; padding-bottom: var(--dispatch-rail-height, 156px); overflow-y: auto; }
   .runtime-site-header { position: relative; height: 64px; grid-template-columns: 1fr auto; padding: 0 14px; }
   .runtime-stage-readout { display: none; }
   .runtime-header-actions button { min-width: 44px; padding: 0 10px; font-size: 0; }
@@ -1675,12 +1718,13 @@ button { color: inherit; }
   .runtime-loading,
   .runtime-fatal,
   .runtime-empty-state { position: relative; top: auto; right: auto; width: auto; margin: 12px 14px 180px; }
-  .runtime-event-feed { right: 12px; bottom: 91px; width: min(360px, calc(100vw - 24px)); }
-  .flow-mutation-lab { bottom: 91px; left: 12px; }
+  .runtime-event-feed { right: 12px; width: min(360px, calc(100vw - 24px)); }
+  .flow-mutation-lab { left: 12px; }
   .flow-mutation-lab__trigger { min-width: 205px; }
-  .runtime-flow-graph { height: 80px; grid-template-columns: 54px minmax(0, 1fr) 46px; gap: 7px; padding: 0 8px; }
+  .runtime-flow-graph { grid-template-columns: 54px minmax(0, 1fr) 46px; gap: 7px; padding: 10px 8px; }
   .runtime-flow-graph__label span { display: none; }
-  .runtime-flow-graph__track li { width: 126px; }
+  .runtime-flow-graph__shift { grid-template-columns: 1fr; gap: 7px; }
+  .runtime-flow-graph__track li { width: 148px; }
   .runtime-flow-graph__status span { display: none; }
   .runtime-run-drawer { top: 68px; right: 12px; left: 12px; width: auto; max-height: calc(100dvh - 160px); }
   .runtime-run-selector__runs { grid-template-columns: 1fr; }
@@ -1709,18 +1753,18 @@ button { color: inherit; }
   .recomposition-proof { grid-template-columns: 20px 1fr; }
   .recomposition-proof span,
   .recomposition-proof small { grid-column: 2; }
-  .runtime-event-feed { right: 8px; bottom: 84px; width: calc(100vw - 16px); }
+  .runtime-event-feed { right: 8px; width: calc(100vw - 16px); }
   .runtime-event-feed.is-expanded { max-height: 58dvh; }
-  .flow-mutation-lab { bottom: 150px; left: 8px; }
+  .flow-mutation-lab { bottom: calc(var(--dispatch-rail-height) + 58px); left: 8px; }
   .flow-mutation-lab__trigger { min-width: 0; width: 54px; grid-template-columns: 1fr; }
   .flow-mutation-lab__trigger > span,
   .flow-mutation-lab__trigger > svg:last-child { display: none; }
   .flow-mutation-lab__panel { left: 0; width: calc(100vw - 16px); max-height: calc(100dvh - 150px); }
   .flow-mutation-lab__mode { grid-template-columns: 1fr; }
-  .runtime-flow-graph { height: 72px; }
-  .runtime-flow-graph__track li { width: 112px; }
-  .runtime-flow-graph__track li > div { display: none; }
-  .runtime-flow-graph__track li { width: 49px; }
+  .runtime-flow-graph { grid-template-columns: 36px minmax(0, 1fr) 40px; }
+  .runtime-flow-graph__track li { width: 148px; }
+  .runtime-flow-graph__track li:not(.is-current):not(.is-waiting):not(.is-agent) > div strong,
+  .runtime-flow-graph__track li:not(.is-current):not(.is-waiting):not(.is-agent) > div small { display: none; }
   .runtime-flow-graph__label { align-items: center; }
   .runtime-scenario-grid { grid-template-columns: 1fr; }
   .runtime-order-composer__fields,
@@ -1755,9 +1799,8 @@ button { color: inherit; }
   .runtime-scene--decision .runtime-renderer,
   .runtime-scene--delivered .runtime-renderer { max-height: calc(100dvh - 140px); margin: 8px; overflow-y: auto; }
   .runtime-section { padding: 10px 0; }
-  .runtime-flow-graph { height: 72px; }
-  .flow-mutation-lab,
-  .runtime-event-feed { bottom: 80px; }
+  .route-runtime { --dispatch-rail-height: 92px; }
+  .route-runtime:has(.runtime-flow-graph.is-shifted) { --dispatch-rail-height: 148px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

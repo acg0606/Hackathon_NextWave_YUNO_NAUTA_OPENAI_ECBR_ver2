@@ -15,6 +15,7 @@ export function buildHistoricalReplaySeed(scenario: Scenario): JsonObject {
       origin: scenario.origin,
       destination: scenario.destination,
       disruption: scenario.shortName,
+      plannedRoute: scenario.routeBefore,
       route: scenario.routeAfter,
       promise: scenario.promise,
       product: scenario.product,

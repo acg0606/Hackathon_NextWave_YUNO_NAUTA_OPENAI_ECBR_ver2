@@ -36,6 +36,7 @@ const commonSeed: JsonObject = {
     origin: 'Shanghai',
     destination: 'Gaziantep',
     disruption: 'NONE',
+    plannedRoute: ['Shanghai', 'Iskenderun', 'Gaziantep'],
     route: ['Shanghai', 'Iskenderun', 'Gaziantep'],
     distanceKm: 9_250,
     promiseDays: 30,

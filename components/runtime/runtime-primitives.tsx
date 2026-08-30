@@ -12,6 +12,7 @@ import {
   FileCheck2,
   FileWarning,
   Gauge,
+  Bot,
   MapPinned,
   PackageCheck,
   ReceiptText,
@@ -27,8 +28,14 @@ import type {
   JsonObject,
   RuntimeUISection,
   RuntimeUISpec,
+  StepOwner,
   TruthClassification,
 } from '@/lib/runtime/contracts';
+import {
+  ownerLabel,
+  trajectoryShiftTitle,
+  type TrajectoryShiftKind,
+} from '@/lib/runtime/dispatch-journey';
 import { isSafeEvidenceUrl } from '@/lib/runtime/safe-url';
 
 export type RuntimeActionContext = {
@@ -291,6 +298,16 @@ export function ContainerSection({ section }: RuntimeSectionComponentProps) {
   );
 }
 
+function asOwner(value: unknown): StepOwner | null {
+  if (value === 'agent' || value === 'human' || value === 'system') return value;
+  return null;
+}
+
+function asShiftKind(value: unknown): TrajectoryShiftKind | null {
+  if (value === 'disruption' || value === 'reroute' || value === 'requote') return value;
+  return null;
+}
+
 export function ProgressSection({ section }: RuntimeSectionComponentProps) {
   const data = record(section.data);
   const itemsValue = firstValue(data, ['items', 'steps', 'milestones']);
@@ -299,8 +316,28 @@ export function ProgressSection({ section }: RuntimeSectionComponentProps) {
   const progress = typeof progressValue === 'number'
     ? Math.max(0, Math.min(100, progressValue <= 1 ? progressValue * 100 : progressValue))
     : null;
+  const shift = record(firstValue(data, ['trajectoryShift']));
+  const shiftKind = asShiftKind(shift.kind);
+  const fromStops = Array.isArray(shift.from) ? shift.from.filter((stop): stop is string => typeof stop === 'string') : [];
+  const toStops = Array.isArray(shift.to) ? shift.to.filter((stop): stop is string => typeof stop === 'string') : [];
   return (
     <SectionFrame section={section} icon={<Waypoints />} className="runtime-section--progress">
+      {shiftKind ? (
+        <aside className={`runtime-progress-shift is-${shiftKind}`} aria-live="polite">
+          <span>
+            <Bot aria-hidden="true" />
+            {firstText(shift, ['agentLabel'], 'Ari')}
+          </span>
+          <strong>{trajectoryShiftTitle(shiftKind)}</strong>
+          <p>{firstText(shift, ['summary'], 'The dispatch corridor is no longer the planned route.')}</p>
+          {fromStops.length > 0 || toStops.length > 0 ? (
+            <ol aria-label="Dispatch trajectory change">
+              <li><small>Planned</small><em>{fromStops.join(' → ') || 'Corridor not published'}</em></li>
+              <li><small>Now</small><em>{toStops.join(' → ') || 'Corridor not published'}</em></li>
+            </ol>
+          ) : null}
+        </aside>
+      ) : null}
       {progress !== null ? (
         <div className="runtime-progress" aria-label={`${Math.round(progress)} percent complete`}>
           <span style={{ width: `${progress}%` }} />
@@ -311,12 +348,18 @@ export function ProgressSection({ section }: RuntimeSectionComponentProps) {
           {items.map((item, index) => {
             const entry = record(item);
             const status = firstText(entry, ['status', 'state'], index === 0 ? 'current' : 'pending');
+            const owner = asOwner(entry.owner);
+            const agentHighlighted = entry.agentHighlighted === true;
             return (
-              <li className={`is-${status.toLowerCase().replace(/\s+/g, '-')}`} key={`${firstText(entry, ['id', 'label', 'title'], 'step')}-${index}`}>
-                <span>{index + 1}</span>
+              <li
+                className={`is-${status.toLowerCase().replace(/\s+/g, '-')}${agentHighlighted ? ' is-agent' : ''}`}
+                key={`${firstText(entry, ['id', 'stepId', 'label', 'title'], 'step')}-${index}`}
+              >
+                <span>{agentHighlighted ? <Bot aria-hidden="true" /> : index + 1}</span>
                 <div>
+                  {owner ? <em>{ownerLabel(owner)}</em> : null}
                   <strong>{firstText(entry, ['label', 'title', 'name'], `Step ${index + 1}`)}</strong>
-                  <small>{humanize(status)}</small>
+                  <small>{agentHighlighted ? `${humanize(status)} · agent on this change` : humanize(status)}</small>
                 </div>
               </li>
             );
