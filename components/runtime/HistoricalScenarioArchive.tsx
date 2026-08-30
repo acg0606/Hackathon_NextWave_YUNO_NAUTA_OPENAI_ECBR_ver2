@@ -83,6 +83,7 @@ export function HistoricalScenarioArchive({
         if (restoreFocusRef.current) previousFocusRef.current?.focus();
       }}
     >
+      <div className="runtime-scenario-archive__content">
       <header>
         <div>
           <span><Newspaper aria-hidden="true" /> Historical disruption archive</span>
@@ -135,6 +136,10 @@ export function HistoricalScenarioArchive({
             aria-current={selectedScenarioId === scenario.id ? 'true' : undefined}
             key={scenario.id}
             style={{ '--scenario-accent': scenario.accent } as React.CSSProperties}
+            onClick={() => {
+              if (busyScenarioId) return;
+              onReplay(scenario);
+            }}
           >
             <span className="runtime-scenario-grid__index">{String(index + 1).padStart(2, '0')}</span>
             <span className="runtime-scenario-grid__year">{scenario.year}</span>
@@ -143,7 +148,13 @@ export function HistoricalScenarioArchive({
             <small>{scenario.place}</small>
             <div className="runtime-scenario-grid__truth"><TruthBadge truth="HISTORICAL_FACT" /></div>
             <div className="runtime-scenario-grid__actions">
-              <a href={scenario.sourceUrl} target="_blank" rel="noreferrer noopener" aria-label={`Open source for ${scenario.shortName}`}>
+              <a
+                href={scenario.sourceUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                aria-label={`Open source for ${scenario.shortName}`}
+                onClick={(event) => event.stopPropagation()}
+              >
                 Source <ExternalLink aria-hidden="true" />
               </a>
               <button
@@ -154,7 +165,10 @@ export function HistoricalScenarioArchive({
                   : `Replay ${scenario.shortName} now`}
                 disabled={Boolean(busyScenarioId)}
                 type="button"
-                onClick={() => onReplay(scenario)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onReplay(scenario);
+                }}
               >
                 {busyScenarioId === scenario.id ? (
                   <><LoaderCircle aria-hidden="true" className="runtime-replay-feedback__spinner" /> Building replay…</>
@@ -174,6 +188,7 @@ export function HistoricalScenarioArchive({
         <TruthBadge truth="SIMULATED_IF_TODAY" />
         <span>A replay creates a new isolated simulated run. It causes no external booking or payment action.</span>
       </footer>
+      </div>
     </dialog>
   );
 }

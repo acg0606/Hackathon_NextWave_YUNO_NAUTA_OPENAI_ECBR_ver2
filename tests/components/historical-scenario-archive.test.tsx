@@ -32,6 +32,26 @@ afterEach(() => {
 });
 
 describe('HistoricalScenarioArchive', () => {
+  it('replays when the event card itself is clicked, not only Replay now', () => {
+    const scenario = scenarios[0];
+    const onReplay = vi.fn();
+    render(
+      <HistoricalScenarioArchive
+        open
+        replayFeedback={{ state: 'idle' }}
+        onClose={vi.fn()}
+        onReplay={onReplay}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('heading', { name: scenario.shortName }));
+    expect(onReplay).toHaveBeenCalledWith(scenario);
+    onReplay.mockClear();
+
+    fireEvent.click(screen.getByRole('link', { name: `Open source for ${scenario.shortName}` }));
+    expect(onReplay).not.toHaveBeenCalled();
+  });
+
   it('exposes the selected replay, progress, and duplicate-click protection', () => {
     const scenario = scenarios[0];
     const onReplay = vi.fn();
