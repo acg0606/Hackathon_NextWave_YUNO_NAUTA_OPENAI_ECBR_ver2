@@ -3,11 +3,11 @@
 
 ## Platform
 
-Web experience published through ChatGPT Sites.
+Web.
 
 ## Stack
 
-Vinext, React 19, TypeScript, Tailwind CSS, shadcn/ui, and Cloudflare Worker-compatible ESM. The user explicitly chose ChatGPT Sites as the delivery target.
+Vinext, React 19, TypeScript, Zod, Vitest, Tailwind CSS, shadcn/ui, MapLibre GL, Server-Sent Events, and Cloudflare Worker-compatible ESM. Sites remains a possible future delivery target, but this repository is local-only until publication is separately authorized.
 
 ## Users
 
@@ -16,7 +16,7 @@ Vinext, React 19, TypeScript, Tailwind CSS, shadcn/ui, and Cloudflare Worker-com
 
 ## Product Purpose
 
-Let a person choose a product, origin, and destination; create a delivery; replay one of ten major historical logistics disruptions as if it happened today; enrich the replay with clearly labeled current context; and watch both the route and the interface rebuild around the new operating reality.
+Let a person choose a product, destination, transport mode, and promise from the fixed Shanghai demo origin; create a delivery; replay one of ten major historical logistics disruptions as if it happened today; enrich the replay with clearly labeled current context; and watch both the route and the interface rebuild around the new operating reality.
 
 ## Positioning
 
@@ -24,7 +24,7 @@ RouteShift is not a static logistics dashboard. Its interface is the product mec
 
 ## Operating Context
 
-Product selection; origin and destination on a world map; delivery purchase; historical scenario selection; current-context retrieval; route tracking; incident playback; alternatives; human authorization; mock Yuno payment and Nauta operations; documents; evidence newsroom; carrier handoff; last mile.
+Product selection; a fixed Shanghai origin and editable destination coordinates on a world map; delivery purchase; historical scenario selection; current-context retrieval; live corridor traffic; route tracking; incident playback; alternatives; human authorization; optional Yuno Sandbox checkout; mock Nauta operations; documents; evidence newsroom; carrier handoff; last mile.
 
 ## Capabilities and Constraints
 
@@ -32,9 +32,13 @@ Product selection; origin and destination on a world map; delivery purchase; his
 - A realistic, interactive Earth globe and visible global routes.
 - A newsroom with real source links, historical dates, and observation dates.
 - Historical facts, current context, and synthetic what-if outcomes must never be visually or semantically mixed.
-- Yuno, Nauta, and carrier operations remain `MOCK_CONNECTOR` and create no external side effects.
+- Yuno payment orchestration may use the external Sandbox only after explicit buyer opt-in and server configuration. Nauta and carrier operations remain `MOCK_CONNECTOR` and create no external side effects.
 - API keys remain server-side only.
-- The first Sites version does not depend on AIS or OpenSky; live telemetry can be added after the core experience is proven.
+- The deterministic runtime and judge demonstration never require an API key.
+- An allowlisted semantic renderer accepts validated UI specifications, never generated executable code.
+- Human actions resume the same run and are protected by revision and idempotency checks.
+- The first local runtime uses explicitly non-durable process memory behind a replaceable store interface.
+- The local prototype does not depend on AIS or OpenSky; live telemetry can be added after the core experience is proven.
 - Do not clone DHL, Loggi, or another carrier. Build original, recognizably different interface languages for ocean, air express, and last mile.
 - The experience must work with keyboard, touch, reduced motion, and a readable non-WebGL fallback.
 
@@ -42,12 +46,12 @@ Product selection; origin and destination on a world map; delivery purchase; his
 
 - Product: RouteShift by JAIGO.
 - Core message: the interface rebuilds itself when reality changes.
-- Every operational claim carries a truth label: `HISTORICAL_FACT`, `LIVE_CURRENT_CONTEXT`, `SIMULATED_IF_TODAY`, or `MOCK_CONNECTOR`.
+- Every operational claim carries a truth label: `HISTORICAL_FACT`, `LIVE_CURRENT_CONTEXT`, `EXTERNAL_SANDBOX`, `SIMULATED_IF_TODAY`, `MOCK_CONNECTOR`, or `UNKNOWN`.
 
 ## Evidence on Hand
 
-- The existing research dataset contains seventeen historical events and thirty-one direct sources.
-- Historical source URLs and observed dates are evidence; shipment paths, costs, ETAs, UI changes, and connector responses are simulations.
+- The incorporated archive contains ten historical evidence fixtures, each with one curated source URL. A broader external research input informed selection but is not bundled here, so RouteShift makes no count claim for it.
+- Historical source URLs and observed dates are evidence; AIS/ADS-B positions are current context; shipment assignment, paths, costs, ETAs, and UI consequences are simulations unless a separately verified identifier proves otherwise.
 - No customer, accuracy, savings, or performance claim is approved without direct evidence.
 
 ## Product Principles

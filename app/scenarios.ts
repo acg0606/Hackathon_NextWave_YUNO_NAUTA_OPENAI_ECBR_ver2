@@ -1,5 +1,23 @@
 export type TransportMode = 'AIR' | 'OCEAN' | 'OCEAN_ROAD' | 'RAIL_OCEAN';
 
+export type TruthClassification =
+  | 'HISTORICAL_FACT'
+  | 'LIVE_CURRENT_CONTEXT'
+  | 'EXTERNAL_SANDBOX'
+  | 'SIMULATED_IF_TODAY'
+  | 'MOCK_CONNECTOR'
+  | 'UNKNOWN';
+
+export type ScenarioProvenance = {
+  sourceTitle: string;
+  sourceUrl: string;
+  eventDate: string;
+  publicationDate: 'UNKNOWN';
+  retrievedDate: 'UNKNOWN';
+  confidence: 'MEDIUM';
+  classification: 'HISTORICAL_FACT';
+};
+
 export type Scenario = {
   id: string;
   shortName: string;
@@ -29,9 +47,12 @@ export type Scenario = {
   trackerBefore: string;
   trackerAfter: string;
   accent: string;
+  provenance: ScenarioProvenance;
 };
 
-export const scenarios: Scenario[] = [
+type ScenarioFixture = Omit<Scenario, 'provenance'>;
+
+const scenarioFixtures: ScenarioFixture[] = [
   {
     id: 'EVT-012',
     shortName: 'Delta / CrowdStrike',
@@ -334,9 +355,264 @@ export const scenarios: Scenario[] = [
   },
 ];
 
+const englishScenarioCopy: Record<
+  string,
+  Pick<
+    ScenarioFixture,
+    | 'shortName'
+    | 'headline'
+    | 'date'
+    | 'category'
+    | 'place'
+    | 'origin'
+    | 'destination'
+    | 'product'
+    | 'promise'
+    | 'historicalImpact'
+    | 'sourceLabel'
+    | 'routeBefore'
+    | 'routeAfter'
+    | 'recommendation'
+    | 'etaDelta'
+    | 'costDelta'
+    | 'documentChange'
+    | 'trackerBefore'
+    | 'trackerAfter'
+  >
+> = {
+  'EVT-012': {
+    shortName: 'Delta / CrowdStrike',
+    headline: 'A software update grounds the air network',
+    date: 'July 19–28, 2024',
+    category: 'Global IT outage',
+    place: 'Atlanta, United States',
+    origin: 'Frankfurt',
+    destination: 'Atlanta',
+    product: 'AOG part · 180 kg',
+    promise: '14 hours',
+    historicalImpact: 'Cancellations, delays, and unavailable operational systems during an acute five-day crisis.',
+    sourceLabel: 'Delta official advisory',
+    routeBefore: ['FRA', 'ATL'],
+    routeAfter: ['FRA', 'LHR', 'ATL'],
+    recommendation: 'Switch carriers through London while preserving the original AWB audit trail.',
+    etaDelta: '+12–48 h',
+    costDelta: '+US$4k–12k',
+    documentChange: 'Cancel the original AWB and issue a replacement',
+    trackerBefore: 'Flight feed · original carrier',
+    trackerAfter: 'Air express · LHR connection',
+  },
+  'EVT-014': {
+    shortName: 'Iskenderun earthquake',
+    headline: 'The port closes and the Bill of Lading changes',
+    date: 'February 6, 2023',
+    category: 'Earthquake and port closure',
+    place: 'Iskenderun, Türkiye',
+    origin: 'Shanghai',
+    destination: 'Gaziantep',
+    product: 'Industrial parts · 1×40′',
+    promise: '30 days',
+    historicalImpact: 'New bookings stopped and cargo shifted to Mersin, requiring the Bill of Lading to be reissued.',
+    sourceLabel: 'Maersk operational update',
+    routeBefore: ['Shanghai', 'Iskenderun', 'Gaziantep'],
+    routeAfter: ['Shanghai', 'Mersin', 'Gaziantep'],
+    recommendation: 'Change the port of discharge to Mersin and reopen the decision if capacity is exhausted.',
+    etaDelta: '+24–96 h',
+    costDelta: '+US$0.5k–2.5k',
+    documentChange: 'Surrender the original B/L and reissue it with Mersin as POD',
+    trackerBefore: 'Ocean milestones · Iskenderun',
+    trackerAfter: 'Mersin terminal + road leg',
+  },
+  'EVT-017': {
+    shortName: 'NotPetya / Maersk',
+    headline: 'The vessel keeps sailing while the carrier system goes dark',
+    date: 'June 27–July 9, 2017',
+    category: 'Cyberattack',
+    place: 'Maersk global network',
+    origin: 'Rotterdam',
+    destination: 'Santos',
+    product: 'Regulated chemicals · 1×40′',
+    promise: '17 days',
+    historicalImpact: 'Global systems and terminals became unavailable while vessels remained maneuverable.',
+    sourceLabel: 'Maersk corporate update',
+    routeBefore: ['Rotterdam', 'Atlantic Ocean', 'Santos'],
+    routeAfter: ['Rotterdam', 'Verified manual flow', 'Santos'],
+    recommendation: 'Use manual continuity only after references and dangerous-goods acceptance are verified.',
+    etaDelta: '+48–168 h',
+    costDelta: '+US$0–2k',
+    documentChange: 'Manual confirmation plus provisional B/L',
+    trackerBefore: 'Carrier portal',
+    trackerAfter: 'Manual milestones · low confidence',
+  },
+  'EVT-001': {
+    shortName: 'Ever Given / Suez',
+    headline: 'One vessel closes global trade’s shortcut',
+    date: 'March 23–29, 2021',
+    category: 'Canal blockage',
+    place: 'Suez Canal, Egypt',
+    origin: 'Shenzhen',
+    destination: 'Rotterdam',
+    product: 'Electronics · 1×40′',
+    promise: '30 days',
+    historicalImpact: 'Vessels waited at both entrances until the ship was refloated and the canal reopened.',
+    sourceLabel: 'International Maritime Organization',
+    routeBefore: ['Yantian', 'Singapore', 'Suez', 'Rotterdam'],
+    routeAfter: ['Yantian', 'Singapore', 'Cape of Good Hope', 'Rotterdam'],
+    recommendation: 'Wait 24 hours; if reopening remains uncertain, divert around the Cape of Good Hope.',
+    etaDelta: '+7–14 days',
+    costDelta: '+US$1.2k–4.5k',
+    documentChange: 'Insurance endorsement plus B/L route amendment',
+    trackerBefore: 'Ocean milestones · Suez',
+    trackerAfter: 'Ocean control · Cape route',
+  },
+  'EVT-005': {
+    shortName: 'Baltimore bridge',
+    headline: 'Maritime access disappears before berthing',
+    date: 'March 26–June 10, 2024',
+    category: 'Port access closure',
+    place: 'Baltimore, United States',
+    origin: 'Antwerp',
+    destination: 'Baltimore',
+    product: 'Industrial machine · 1×40′',
+    promise: '14 days',
+    historicalImpact: 'The original channel became unavailable; partial access preceded full restoration in June.',
+    sourceLabel: 'U.S. Army Corps of Engineers',
+    routeBefore: ['Antwerp', 'Atlantic Ocean', 'Baltimore'],
+    routeAfter: ['Antwerp', 'Norfolk', 'Baltimore by road'],
+    recommendation: 'Discharge in Norfolk when stoppage cost exceeds the diversion premium.',
+    etaDelta: '+24–72 h',
+    costDelta: '+US$1.2k–3.5k',
+    documentChange: 'Change customs port and Bill of Lading',
+    trackerBefore: 'Vessel + Baltimore port',
+    trackerAfter: 'Norfolk terminal + drayage',
+  },
+  'EVT-004': {
+    shortName: 'Panama Canal drought',
+    headline: 'Low water turns capacity into a queue',
+    date: 'August 2023–August 2024',
+    category: 'Climate-driven capacity restriction',
+    place: 'Panama Canal',
+    origin: 'Auckland',
+    destination: 'Philadelphia',
+    product: 'Refrigerated ingredients',
+    promise: '29 days',
+    historicalImpact: 'Draft, daily transits, and booking slots were reduced before a gradual recovery.',
+    sourceLabel: 'Panama Canal Authority',
+    routeBefore: ['Auckland', 'Balboa', 'Panama Canal', 'Philadelphia'],
+    routeAfter: ['Auckland', 'Los Angeles', 'Rail', 'Philadelphia'],
+    recommendation: 'Keep the canal with a confirmed slot; otherwise transship only with a verified cold-chain handoff.',
+    etaDelta: '+2–10 days',
+    costDelta: '+US$2k–6k',
+    documentChange: 'Slot amendment plus cold-chain record',
+    trackerBefore: 'Ocean + reefer telemetry',
+    trackerAfter: 'Port + rail + reefer',
+  },
+  'EVT-008': {
+    shortName: 'Extreme rain in Dubai',
+    headline: 'The air hub floods and the connection disappears',
+    date: 'April 16–20, 2024',
+    category: 'Extreme aviation weather',
+    place: 'Dubai, United Arab Emirates',
+    origin: 'Bengaluru',
+    destination: 'Paris',
+    product: 'Cold-chain pharmaceuticals · 420 kg',
+    promise: '24 hours',
+    historicalImpact: 'Diversions, temporary restrictions, and thousands of delayed bags accompanied the recovery.',
+    sourceLabel: 'Emirates official letter',
+    routeBefore: ['BLR', 'DXB', 'CDG'],
+    routeAfter: ['BLR', 'DOH', 'CDG'],
+    recommendation: 'Switch through Doha after refrigerated storage and uplift are confirmed.',
+    etaDelta: '+8–36 h',
+    costDelta: '+US$2k–7k',
+    documentChange: 'AWB amendment plus cold-chain instruction',
+    trackerBefore: 'Air waybill + temperature',
+    trackerAfter: 'Air express + continuous logger',
+  },
+  'EVT-009': {
+    shortName: 'British Columbia floods',
+    headline: 'Roads and rails break behind the port',
+    date: 'November 14–December 20, 2021',
+    category: 'Road and rail flooding',
+    place: 'Vancouver, Canada',
+    origin: 'Shanghai',
+    destination: 'Calgary',
+    product: 'Home appliances · 1×40′',
+    promise: '20 days',
+    historicalImpact: 'Damaged bridges and highways reduced rail capacity and congested the gateway.',
+    sourceLabel: 'Government of British Columbia',
+    routeBefore: ['Shanghai', 'Vancouver', 'Calgary'],
+    routeAfter: ['Shanghai', 'Prince Rupert', 'Calgary'],
+    recommendation: 'Use Prince Rupert with a confirmed rail slot; otherwise prioritize critical SKUs only.',
+    etaDelta: '+48–144 h',
+    costDelta: '+US$1k–4k',
+    documentChange: 'Change port, B/L, and rail waybill',
+    trackerBefore: 'Ocean + Vancouver rail',
+    trackerAfter: 'Ocean + Prince Rupert rail',
+  },
+  'EVT-011': {
+    shortName: 'CN + CPKC shutdown',
+    headline: 'Both national railways stop together',
+    date: 'August 22–26, 2024',
+    category: 'Railway shutdown',
+    place: 'Canada',
+    origin: 'Regina',
+    destination: 'Tokyo',
+    product: 'Food ingredients',
+    promise: '21 days',
+    historicalImpact: 'Both major networks closed; operational recovery continued after the legal shutdown ended.',
+    sourceLabel: 'Government of Canada',
+    routeBefore: ['Regina', 'Vancouver', 'Tokyo'],
+    routeAfter: ['Regina by truck', 'Seattle', 'Tokyo'],
+    recommendation: 'Wait 48 hours; use Seattle only for lots without a recovered rail slot.',
+    etaDelta: '+24–96 h',
+    costDelta: '+US$4k–12k',
+    documentChange: 'New export port plus Bill of Lading',
+    trackerBefore: 'Rail car + ocean',
+    trackerAfter: 'Truck + Seattle terminal + ocean',
+  },
+  'EVT-010': {
+    shortName: 'ILA port strike',
+    headline: 'The Atlantic coast pauses',
+    date: 'October 1–3, 2024',
+    category: 'Port strike',
+    place: 'U.S. ports, Maine–Texas',
+    origin: 'Santos',
+    destination: 'Savannah',
+    product: 'Apparel · 1×40′',
+    promise: '18 days',
+    historicalImpact: 'Port work stopped and resumed after a tentative wage agreement and contract extension.',
+    sourceLabel: 'International Longshoremen’s Association',
+    routeBefore: ['Santos', 'Atlantic Ocean', 'Savannah'],
+    routeAfter: ['Santos', 'Halifax', 'Savannah by road'],
+    recommendation: 'Wait with inventory coverage; divert only SKUs that would miss their commercial window.',
+    etaDelta: '+48–168 h',
+    costDelta: '+US$1.5k–5k',
+    documentChange: 'Change port of discharge plus customer notice',
+    trackerBefore: 'Vessel + Savannah terminal',
+    trackerAfter: 'Halifax + road linehaul',
+  },
+};
+
+export const scenarios: Scenario[] = scenarioFixtures.map((scenario) => {
+  const copy = englishScenarioCopy[scenario.id];
+  const translated = { ...scenario, ...copy };
+
+  return {
+    ...translated,
+    provenance: {
+      sourceTitle: translated.sourceLabel,
+      sourceUrl: translated.sourceUrl,
+      eventDate: translated.date,
+      publicationDate: 'UNKNOWN',
+      retrievedDate: 'UNKNOWN',
+      confidence: 'MEDIUM',
+      classification: 'HISTORICAL_FACT',
+    },
+  };
+});
+
 export const modeLabel: Record<TransportMode, string> = {
-  AIR: 'Aéreo',
-  OCEAN: 'Marítimo',
-  OCEAN_ROAD: 'Marítimo + rodoviário',
-  RAIL_OCEAN: 'Ferroviário + marítimo',
+  AIR: 'Air',
+  OCEAN: 'Ocean',
+  OCEAN_ROAD: 'Ocean + road',
+  RAIL_OCEAN: 'Rail + ocean',
 };

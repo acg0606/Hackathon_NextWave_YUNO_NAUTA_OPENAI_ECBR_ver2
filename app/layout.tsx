@@ -19,9 +19,9 @@ const bacasimeAntique = Bacasime_Antique({
 });
 
 export const metadata: Metadata = {
-  title: 'RouteShift — a realidade muda, a interface também',
+  title: 'RouteShift — when reality changes, the interface changes with it',
   description:
-    'Crie uma entrega global e teste como ela responderia hoje a incidentes logísticos históricos.',
+    'Create a global delivery and watch a flow-native interface adapt historical logistics disruptions to today.',
 };
 
 export default function RootLayout({
@@ -30,7 +30,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR">
+    <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${bacasimeAntique.variable} antialiased`}
       >

@@ -29,15 +29,21 @@ Photorealistic orbital imagery, atmospheric light, haze, silhouette, shadow, cal
 - `HOLD / DISRUPTION_DETECTED`: light stops, affected route breaks, amber incident cue enters, and the newsroom becomes visible.
 - `CROSSFADE / AWAITING_HUMAN_DECISION`: original and alternate operating surfaces coexist briefly for comparison.
 - `NEW_SCENE / REROUTED`: obsolete modal components leave the layout; the new modal interface enters.
-- `DAY / DELIVERED`: promise, executed route, documents, mock payment adjustments, and sources reconcile in daylight.
+- `DAY / DELIVERED`: promise, executed route, documents, payment state with its truth class, and sources reconcile in daylight.
 
 ## Motion
 
-The signature interaction is a scrubbable cue timeline bound to interface state. Transitions raise, blend, hold, or black out the horizon while the component registry swaps the actual operating surface. Reduced motion uses discrete labeled cuts with the same information and focus order.
+The signature interaction is a cue timeline derived from the active flow and run state. Transitions raise, blend, hold, or black out the horizon while the component registry swaps the actual operating surface. Completed cues may be inspected, but the rail never mutates execution truth. Reduced motion uses discrete labeled cuts with the same information and focus order.
+
+## Semantic Runtime Composition
+
+The UI compiler translates capabilities and validated outputs into wide operational bands: route, booking, container, evidence, comparison, discrepancy, confidence, decision, action result, event feed, and receipt. These are compositional materials, not dashboard cards. A step ID never selects a visual component.
+
+The run header exposes identity, flow version, revision, current owner, and status as quiet operational metadata. The public event feed is an audit instrument, not a developer console. The flow mutation climax is supported by three observed events—flow update, semantic discovery, and UI-spec revision—before the phrase “FLOW CHANGED → ARI UNDERSTOOD → UI RECOMPOSED” appears.
 
 ## Truth Treatment
 
-Historical evidence uses `HISTORICAL_FACT`; current APIs use `LIVE_CURRENT_CONTEXT` or `UNKNOWN`; contrafactual outcomes use `SIMULATED_IF_TODAY`; sponsor and carrier actions use `MOCK_CONNECTOR`. Labels remain visible through every scene and are never communicated by color alone.
+Historical evidence uses `HISTORICAL_FACT`; validated current observations use `LIVE_CURRENT_CONTEXT`; Yuno Test Mode results use `EXTERNAL_SANDBOX`; counterfactual outcomes use `SIMULATED_IF_TODAY`; unconnected sponsor and carrier actions use `MOCK_CONNECTOR`; unavailable evidence uses `UNKNOWN`. Labels remain visible through every scene and are never communicated by color alone.
 
 ## Responsive Behavior
 

@@ -2,56 +2,68 @@
 
 import 'maplibre-gl/dist/maplibre-gl.css';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GeoJSONSource, Map as MapLibreMap } from 'maplibre-gl';
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import Image from 'next/image';
 import earthPoster from '../assets/plates/earth-globe.png';
-import type { Scenario } from './scenarios';
+
+export type Coordinates = [number, number];
+
+export type RoutePointViewModel = {
+  id: string;
+  label: string;
+  coordinates: Coordinates;
+};
+
+export type RouteViewModel = {
+  id: string;
+  origin: RoutePointViewModel;
+  destination: RoutePointViewModel;
+  waypoints?: RoutePointViewModel[];
+  traffic?: RoutePointViewModel[];
+  event?: RoutePointViewModel;
+  focusCoordinates?: Coordinates;
+  state: 'draft' | 'planned' | 'in-transit' | 'disrupted' | 'rerouted' | 'held' | 'delivered' | 'unknown';
+  accent?: string;
+  editable?: boolean;
+  attribution?: string;
+};
 
 type LiveEarthProps = {
-  scenario: Scenario;
-  rerouted: boolean;
-  picking: boolean;
-  destinationCoordinates: [number, number];
-  destinationLabel: string;
-  onPick: (coordinates: [number, number]) => void;
-  onLiveContext: (count: number | null) => void;
+  model: RouteViewModel;
+  picking?: boolean;
+  onPick?: (coordinates: Coordinates) => void;
+  onStatusChange?: (status: 'loading' | 'webgl' | 'fallback') => void;
 };
 
-type Coordinates = [number, number];
 type PointFeature = {
   type: 'Feature';
-  properties: Record<string, unknown>;
+  properties: { id: string; label: string; role: 'origin' | 'destination' | 'waypoint' | 'event' | 'traffic' };
   geometry: { type: 'Point'; coordinates: Coordinates };
 };
+
 type LineFeature = {
   type: 'Feature';
-  properties: Record<string, unknown>;
+  properties: { state: RouteViewModel['state'] };
   geometry: { type: 'LineString'; coordinates: Coordinates[] };
 };
-type PointCollection = { type: 'FeatureCollection'; features: PointFeature[] };
-type EonetFeature = {
-  properties?: { id?: string };
-  geometry?: { type?: string; coordinates?: unknown };
-};
-type EonetCollection = { features?: EonetFeature[] };
 
-const detours: Record<string, [number, number]> = {
-  'EVT-012': [-0.4543, 51.47],
-  'EVT-014': [34.6415, 36.8121],
-  'EVT-017': [-19, 24],
-  'EVT-001': [18.47, -34.36],
-  'EVT-005': [-76.2859, 36.8508],
-  'EVT-004': [-118.2437, 34.0522],
-  'EVT-008': [51.6081, 25.2731],
-  'EVT-009': [-130.3208, 54.315],
-  'EVT-011': [-122.3321, 47.6062],
-  'EVT-010': [-63.5752, 44.6488],
-};
+type PointCollection = { type: 'FeatureCollection'; features: PointFeature[] };
+
+function coordinatesEqual(left: Coordinates, right: Coordinates) {
+  return left[0] === right[0] && left[1] === right[1];
+}
+
+function pathPoints(model: RouteViewModel): RoutePointViewModel[] {
+  const points = [model.origin, ...(model.waypoints ?? []), model.destination];
+  return points.filter((point, index) => (
+    index === 0 || !coordinatesEqual(point.coordinates, points[index - 1].coordinates)
+  ));
+}
 
 function greatCircle(from: Coordinates, to: Coordinates, steps = 48): Coordinates[] {
-  if (from[0] === to[0] && from[1] === to[1]) return [from];
+  if (coordinatesEqual(from, to)) return [from];
 
   const radians = Math.PI / 180;
   const degrees = 180 / Math.PI;
@@ -80,81 +92,85 @@ function greatCircle(from: Coordinates, to: Coordinates, steps = 48): Coordinate
   });
 }
 
-function lineFeature(
-  scenario: Scenario,
-  destination: [number, number],
-  rerouted: boolean,
-): LineFeature {
-  const anchors = rerouted
-    ? [scenario.originCoordinates, detours[scenario.id], destination]
-    : [scenario.originCoordinates, scenario.coordinates, destination];
-  const coordinates = anchors.flatMap((anchor, index) => {
+function lineFeature(model: RouteViewModel): LineFeature {
+  const anchors = pathPoints(model);
+  const coordinates = anchors.flatMap((point, index) => {
     if (index === anchors.length - 1) return [];
-    const leg = greatCircle(anchor, anchors[index + 1]);
+    const leg = greatCircle(point.coordinates, anchors[index + 1].coordinates);
     return index === 0 ? leg : leg.slice(1);
   });
-
   return {
     type: 'Feature',
-    properties: { rerouted },
+    properties: { state: model.state },
     geometry: { type: 'LineString', coordinates },
   };
 }
 
-function pointCollection(
-  scenario: Scenario,
-  destination: [number, number],
-): PointCollection {
-  return {
-    type: 'FeatureCollection',
-    features: [
-      {
-        type: 'Feature',
-        properties: { role: 'origin' },
-        geometry: { type: 'Point', coordinates: scenario.originCoordinates },
-      },
-      {
-        type: 'Feature',
-        properties: { role: 'destination' },
-        geometry: { type: 'Point', coordinates: destination },
-      },
-      {
-        type: 'Feature',
-        properties: { role: 'event' },
-        geometry: { type: 'Point', coordinates: scenario.coordinates },
-      },
-    ],
-  };
+function pointCollection(model: RouteViewModel): PointCollection {
+  const routePoints = pathPoints(model);
+  const features: PointFeature[] = routePoints.map((point, index) => ({
+    type: 'Feature',
+    properties: {
+      id: point.id,
+      label: point.label,
+      role: index === 0 ? 'origin' : index === routePoints.length - 1 ? 'destination' : 'waypoint',
+    },
+    geometry: { type: 'Point', coordinates: point.coordinates },
+  }));
+  if (model.event && !features.some((feature) => coordinatesEqual(feature.geometry.coordinates, model.event?.coordinates ?? [0, 0]))) {
+    features.push({
+      type: 'Feature',
+      properties: { id: model.event.id, label: model.event.label, role: 'event' },
+      geometry: { type: 'Point', coordinates: model.event.coordinates },
+    });
+  }
+  for (const point of model.traffic ?? []) {
+    if (features.some((feature) => coordinatesEqual(feature.geometry.coordinates, point.coordinates))) continue;
+    features.push({
+      type: 'Feature',
+      properties: { id: point.id, label: point.label, role: 'traffic' },
+      geometry: { type: 'Point', coordinates: point.coordinates },
+    });
+  }
+  return { type: 'FeatureCollection', features };
 }
 
-export function LiveEarth({
-  scenario,
-  rerouted,
-  picking,
-  destinationCoordinates,
-  destinationLabel,
-  onPick,
-  onLiveContext,
-}: LiveEarthProps) {
+function routeColor(model: RouteViewModel) {
+  if (model.state === 'rerouted' || model.state === 'delivered') return '#66d3a3';
+  if (model.state === 'held' || model.state === 'disrupted') return '#ffb000';
+  return model.accent ?? '#7c9fff';
+}
+
+function routeSummary(model: RouteViewModel) {
+  const labels = pathPoints(model).map((point) => point.label);
+  const event = model.event ? ` Disruption marker: ${model.event.label}.` : '';
+  const editHint = model.editable ? ' A keyboard-accessible coordinate editor is available in the order surface.' : '';
+  const traffic = model.traffic?.length
+    ? ` ${model.traffic.length} current corridor traffic observations are shown; they are not proof of shipment assignment.`
+    : '';
+  return `${model.state.replace('-', ' ')} route: ${labels.join(' to ')}.${event}${traffic}${editHint}`;
+}
+
+export function LiveEarth({ model, picking = false, onPick, onStatusChange }: LiveEarthProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  const modelRef = useRef(model);
   const onPickRef = useRef(onPick);
   const pickingRef = useRef(picking);
-  const scenarioRef = useRef(scenario);
-  const destinationRef = useRef(destinationCoordinates);
-  const reroutedRef = useRef(rerouted);
-  const liveContextRef = useRef(onLiveContext);
   const overlayUpdateRef = useRef<(() => void) | null>(null);
   const [status, setStatus] = useState<'loading' | 'webgl' | 'fallback'>('loading');
+  const [networkWarning, setNetworkWarning] = useState(false);
+  const summaryId = useMemo(() => `earth-route-summary-${model.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`, [model.id]);
 
   useEffect(() => {
+    modelRef.current = model;
     onPickRef.current = onPick;
     pickingRef.current = picking;
-    scenarioRef.current = scenario;
-    destinationRef.current = destinationCoordinates;
-    reroutedRef.current = rerouted;
-    liveContextRef.current = onLiveContext;
-  }, [destinationCoordinates, onLiveContext, onPick, picking, rerouted, scenario]);
+  }, [model, onPick, picking]);
+
+  useEffect(() => {
+    onStatusChange?.(status);
+  }, [onStatusChange, status]);
 
   useEffect(() => {
     let active = true;
@@ -162,6 +178,10 @@ export function LiveEarth({
     let overlay: SVGSVGElement | null = null;
     let drawOverlay: (() => void) | null = null;
     let resizeObserver: ResizeObserver | null = null;
+    let tileErrorCount = 0;
+    const fallbackTimer = window.setTimeout(() => {
+      if (active) setStatus((current) => current === 'loading' ? 'fallback' : current);
+    }, 9_000);
 
     async function mountMap() {
       if (!containerRef.current) return;
@@ -173,8 +193,8 @@ export function LiveEarth({
 
         map = new maplibregl.Map({
           container: containerRef.current,
-          center: [-24, 22],
-          zoom: 1.72,
+          center: modelRef.current.focusCoordinates ?? modelRef.current.event?.coordinates ?? [12, 23],
+          zoom: 1.52,
           minZoom: 0.35,
           maxZoom: 5,
           attributionControl: false,
@@ -193,30 +213,18 @@ export function LiveEarth({
                 attribution: 'NASA EOSDIS GIBS',
               },
             },
-            layers: [
-              {
-                id: 'blue-marble',
-                type: 'raster',
-                source: 'nasaBlueMarble',
-                paint: {
-                  'raster-saturation': -0.08,
-                  'raster-contrast': 0.12,
-                  'raster-brightness-max': 0.78,
-                },
+            layers: [{
+              id: 'blue-marble',
+              type: 'raster',
+              source: 'nasaBlueMarble',
+              paint: {
+                'raster-saturation': -0.08,
+                'raster-contrast': 0.12,
+                'raster-brightness-max': 0.78,
               },
-            ],
+            }],
             sky: {
-              'atmosphere-blend': [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                0,
-                1,
-                5,
-                0.6,
-                7,
-                0,
-              ],
+              'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 5, 0.6, 7, 0],
             },
           } as never,
         });
@@ -227,20 +235,17 @@ export function LiveEarth({
 
         map.on('load', () => {
           if (!map) return;
-
-          map.addSource('route', {
-            type: 'geojson',
-            data: lineFeature(scenarioRef.current, destinationRef.current, reroutedRef.current),
-          });
+          const currentModel = modelRef.current;
+          map.addSource('route', { type: 'geojson', data: lineFeature(currentModel) });
           map.addLayer({
             id: 'route-shadow',
             type: 'line',
             source: 'route',
             layout: { 'line-cap': 'round', 'line-join': 'round' },
             paint: {
-              'line-color': '#ffb000',
+              'line-color': routeColor(currentModel),
               'line-width': 14,
-              'line-opacity': 0.34,
+              'line-opacity': 0.32,
               'line-blur': 7,
             },
           });
@@ -250,23 +255,20 @@ export function LiveEarth({
             source: 'route',
             layout: { 'line-cap': 'round', 'line-join': 'round' },
             paint: {
-              'line-color': reroutedRef.current ? '#66d3a3' : '#ffb000',
+              'line-color': routeColor(currentModel),
               'line-width': 4.5,
-              'line-dasharray': reroutedRef.current ? [1, 0] : [2, 1.5],
+              'line-dasharray': currentModel.state === 'disrupted' || currentModel.state === 'held' ? [2, 1.5] : [1, 0],
             },
           });
 
-          map.addSource('journey-points', {
-            type: 'geojson',
-            data: pointCollection(scenarioRef.current, destinationRef.current),
-          });
+          map.addSource('journey-points', { type: 'geojson', data: pointCollection(currentModel) });
           map.addLayer({
             id: 'journey-points-halo',
             type: 'circle',
             source: 'journey-points',
             paint: {
-              'circle-radius': ['match', ['get', 'role'], 'event', 20, 13],
-              'circle-color': ['match', ['get', 'role'], 'event', scenarioRef.current.accent, '#fff3d6'],
+              'circle-radius': ['match', ['get', 'role'], 'event', 20, 'traffic', 8, 'waypoint', 10, 13],
+              'circle-color': ['match', ['get', 'role'], 'event', currentModel.accent ?? '#ffb000', 'traffic', '#65d8ff', '#fff3d6'],
               'circle-opacity': 0.25,
               'circle-blur': 0.45,
             },
@@ -276,8 +278,8 @@ export function LiveEarth({
             type: 'circle',
             source: 'journey-points',
             paint: {
-              'circle-radius': ['match', ['get', 'role'], 'event', 8, 6],
-              'circle-color': ['match', ['get', 'role'], 'event', scenarioRef.current.accent, '#fff3d6'],
+              'circle-radius': ['match', ['get', 'role'], 'event', 8, 'traffic', 3, 'waypoint', 4, 6],
+              'circle-color': ['match', ['get', 'role'], 'event', currentModel.accent ?? '#ffb000', 'traffic', '#65d8ff', '#fff3d6'],
               'circle-stroke-width': 1.5,
               'circle-stroke-color': '#06101d',
             },
@@ -289,14 +291,6 @@ export function LiveEarth({
           const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
           path.classList.add('live-earth__route-path');
           overlay.appendChild(path);
-          const roles = ['origin', 'destination', 'event'] as const;
-          const circles = roles.map((role) => {
-            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            circle.classList.add('live-earth__route-point', `live-earth__route-point--${role}`);
-            circle.setAttribute('r', role === 'event' ? '7' : '5');
-            overlay?.appendChild(circle);
-            return circle;
-          });
           containerRef.current?.appendChild(overlay);
 
           drawOverlay = () => {
@@ -304,12 +298,7 @@ export function LiveEarth({
             const width = containerRef.current.clientWidth;
             const height = containerRef.current.clientHeight;
             overlay.setAttribute('viewBox', `0 0 ${width} ${height}`);
-            const route = lineFeature(
-              scenarioRef.current,
-              destinationRef.current,
-              reroutedRef.current,
-            ).geometry.coordinates;
-            const projected = route.map((coordinates) => map?.project(coordinates));
+            const projected = lineFeature(modelRef.current).geometry.coordinates.map((coordinates) => map?.project(coordinates));
             path.setAttribute(
               'd',
               projected
@@ -317,19 +306,7 @@ export function LiveEarth({
                 .map((point, index) => `${index === 0 ? 'M' : 'L'}${point.x.toFixed(1)},${point.y.toFixed(1)}`)
                 .join(' '),
             );
-            path.setAttribute('stroke', reroutedRef.current ? '#66d3a3' : '#ffb000');
-            const pointCoordinates = [
-              scenarioRef.current.originCoordinates,
-              destinationRef.current,
-              scenarioRef.current.coordinates,
-            ];
-            circles.forEach((circle, index) => {
-              const point = map?.project(pointCoordinates[index]);
-              if (!point) return;
-              circle.setAttribute('cx', point.x.toFixed(1));
-              circle.setAttribute('cy', point.y.toFixed(1));
-              circle.setAttribute('fill', index === 2 ? scenarioRef.current.accent : '#fff3d6');
-            });
+            path.setAttribute('stroke', routeColor(modelRef.current));
           };
 
           overlayUpdateRef.current = drawOverlay;
@@ -341,20 +318,33 @@ export function LiveEarth({
           });
           if (containerRef.current) resizeObserver.observe(containerRef.current);
           drawOverlay();
+        });
 
+        map.once('idle', () => {
+          if (!active) return;
+          window.clearTimeout(fallbackTimer);
           setStatus('webgl');
         });
 
         map.on('click', (event) => {
-          if (!pickingRef.current) return;
-          onPickRef.current([
+          if (!pickingRef.current || modelRef.current.editable === false) return;
+          onPickRef.current?.([
             Number(event.lngLat.lng.toFixed(4)),
             Number(event.lngLat.lat.toFixed(4)),
           ]);
         });
 
         map.on('error', (event) => {
-          if (event.error.message.includes('WebGL')) setStatus('fallback');
+          const message = event.error.message.toLowerCase();
+          if (message.includes('webgl') || message.includes('context lost')) {
+            setStatus('fallback');
+            return;
+          }
+          tileErrorCount += 1;
+          if (tileErrorCount >= 3) {
+            setNetworkWarning(true);
+            setStatus('fallback');
+          }
         });
       } catch {
         if (active) setStatus('fallback');
@@ -363,23 +353,9 @@ export function LiveEarth({
 
     void mountMap();
 
-    void fetch('https://eonet.gsfc.nasa.gov/api/v3/events/geojson?status=open&days=20&limit=80')
-      .then((response) => (response.ok ? response.text() : Promise.reject(new Error('EONET unavailable'))))
-      .then((body) => JSON.parse(body) as EonetCollection)
-      .then((data) => {
-        if (!active) return;
-        const points = (data.features ?? []).filter((feature) => feature.geometry?.type === 'Point');
-        const eventIds = new Set(
-          points
-            .map((feature) => feature.properties?.id)
-            .filter((id): id is string => Boolean(id)),
-        );
-        liveContextRef.current(eventIds.size || points.length);
-      })
-      .catch(() => liveContextRef.current(null));
-
     return () => {
       active = false;
+      window.clearTimeout(fallbackTimer);
       if (map && drawOverlay) {
         map.off('move', drawOverlay);
         map.off('resize', drawOverlay);
@@ -395,41 +371,50 @@ export function LiveEarth({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
-
-    void (map.getSource('route') as GeoJSONSource | undefined)?.setData(
-      lineFeature(scenario, destinationCoordinates, rerouted),
+    void (map.getSource('route') as GeoJSONSource | undefined)?.setData(lineFeature(model));
+    void (map.getSource('journey-points') as GeoJSONSource | undefined)?.setData(pointCollection(model));
+    map.setPaintProperty('route-line', 'line-color', routeColor(model));
+    map.setPaintProperty('route-shadow', 'line-color', routeColor(model));
+    map.setPaintProperty(
+      'route-line',
+      'line-dasharray',
+      model.state === 'disrupted' || model.state === 'held' ? [2, 1.5] : [1, 0],
     );
-    void (map.getSource('journey-points') as GeoJSONSource | undefined)?.setData(
-      pointCollection(scenario, destinationCoordinates),
-    );
-    map.setPaintProperty('route-line', 'line-color', rerouted ? '#66d3a3' : '#ffb000');
-    const camera = { center: scenario.coordinates, zoom: rerouted ? 1.62 : 1.48 } as const;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      map.jumpTo(camera);
-    } else {
-      map.easeTo({ ...camera, duration: 900 });
-    }
+    const camera = {
+      center: model.focusCoordinates ?? model.event?.coordinates ?? model.destination.coordinates,
+      zoom: model.state === 'delivered' ? 2.15 : 1.52,
+    } as const;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) map.jumpTo(camera);
+    else map.easeTo({ ...camera, duration: 900 });
     overlayUpdateRef.current?.();
-  }, [destinationCoordinates, rerouted, scenario]);
+  }, [model]);
 
   return (
-    <div className={`live-earth live-earth--${status}${picking ? ' is-picking' : ''}`}>
-      <Image className="live-earth__poster" src={earthPoster} alt="" fill priority sizes="(max-width: 820px) 100vw, 53vw" />
+    <div className={`live-earth live-earth--${status}${picking ? ' is-picking' : ''}${networkWarning ? ' has-network-warning' : ''}`}>
+      <Image
+        className="live-earth__poster"
+        src={earthPoster}
+        alt=""
+        fill
+        priority
+        sizes="(max-width: 900px) 100vw, 53vw"
+      />
       <div
         ref={containerRef}
         className="live-earth__map"
-        aria-label="Globo terrestre interativo com a rota da entrega"
-        aria-describedby="earth-route-summary"
+        aria-label="Interactive Earth showing the shipment route"
+        aria-describedby={summaryId}
       />
-      <p id="earth-route-summary" className="live-earth__route-summary">
-        Rota {rerouted ? 'alternativa' : 'planejada'}: {scenario.origin} → evento em {scenario.place} → {destinationLabel}.
-        Para definir o destino sem mouse, use os campos de latitude e longitude na área de compra.
-      </p>
+      <p id={summaryId} className="live-earth__route-summary">{routeSummary(model)}</p>
       <div className="live-earth__status" aria-live="polite">
         <span className="live-earth__pulse" />
-        {status === 'webgl' ? 'TERRA · WEBGL + NASA' : status === 'loading' ? 'CARREGANDO TERRA' : 'TERRA · POSTER SEGURO'}
+        {status === 'webgl' ? 'Earth · WebGL + NASA' : status === 'loading' ? 'Loading Earth' : 'Earth · safe poster'}
       </div>
-      <div className="live-earth__credit">NASA GIBS · âncoras visuais aproximadas</div>
+      <div className="live-earth__credit">
+        {networkWarning ? 'NASA imagery unavailable · route preserved in text' : model.attribution ?? 'NASA GIBS · approximate visual anchors'}
+      </div>
     </div>
   );
 }
+
+export default LiveEarth;
