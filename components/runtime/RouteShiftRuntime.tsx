@@ -7,6 +7,7 @@ import {
   Database,
   Layers3,
   LoaderCircle,
+  Network,
   Newspaper,
   Radio,
   RefreshCw,
@@ -36,6 +37,7 @@ import {
 } from '@/lib/runtime/contracts';
 import { FlowGraph } from './FlowGraph';
 import { FlowMutationLab, type FlowMutationRequest } from './FlowMutationLab';
+import { ArchitecturePanel } from './ArchitecturePanel';
 import { HistoricalScenarioArchive } from './HistoricalScenarioArchive';
 import { IntegrationStatusPanel } from './IntegrationStatusPanel';
 import { PublicEventFeed, type RuntimeConnectionState } from './PublicEventFeed';
@@ -458,6 +460,7 @@ export function RouteShiftRuntime() {
   const [runSelectorOpen, setRunSelectorOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [integrationOpen, setIntegrationOpen] = useState(false);
+  const [architectureOpen, setArchitectureOpen] = useState(false);
   const [streamEpoch, setStreamEpoch] = useState(0);
   const activeRunIdRef = useRef<string | null>(null);
   const lastSequenceRef = useRef(0);
@@ -752,14 +755,41 @@ export function RouteShiftRuntime() {
           {snapshot ? <small>{snapshot.status.replace('_', ' ')} · {spec?.ownership ?? 'system'} owner</small> : null}
         </div>
         <div className="runtime-header-actions">
-          <button type="button" onClick={() => setRunSelectorOpen((current) => !current)} aria-expanded={runSelectorOpen}>
+          <button type="button" onClick={() => {
+            setRunSelectorOpen((current) => !current);
+            setIntegrationOpen(false);
+            setArchitectureOpen(false);
+          }} aria-expanded={runSelectorOpen}>
             <Layers3 aria-hidden="true" /> Runs <span>{runItems.length}</span>
           </button>
-          <button type="button" onClick={() => setArchiveOpen(true)}>
+          <button type="button" onClick={() => {
+            setArchiveOpen(true);
+            setRunSelectorOpen(false);
+            setIntegrationOpen(false);
+            setArchitectureOpen(false);
+          }}>
             <Newspaper aria-hidden="true" /> 10 scenarios
           </button>
-          <button type="button" onClick={() => setIntegrationOpen((current) => !current)} aria-expanded={integrationOpen}>
+          <button type="button" onClick={() => {
+            setIntegrationOpen((current) => !current);
+            setRunSelectorOpen(false);
+            setArchitectureOpen(false);
+          }} aria-expanded={integrationOpen}>
             <Radio aria-hidden="true" /> Integrations
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setArchitectureOpen((current) => !current);
+              setRunSelectorOpen(false);
+              setIntegrationOpen(false);
+              setArchiveOpen(false);
+            }}
+            aria-controls="runtime-architecture-panel"
+            aria-expanded={architectureOpen}
+            aria-haspopup="dialog"
+          >
+            <Network aria-hidden="true" /> Architecture
           </button>
         </div>
       </header>
@@ -861,10 +891,23 @@ export function RouteShiftRuntime() {
         open={integrationOpen}
       />
 
+      <ArchitecturePanel
+        onClose={() => setArchitectureOpen(false)}
+        open={architectureOpen}
+        runtimeProof={snapshot ? {
+          runId: snapshot.runId,
+          flowVersion: snapshot.flowVersion,
+          revision: snapshot.revision,
+          status: snapshot.status,
+          currentStepId: snapshot.currentStepId,
+          owner: spec?.ownership ?? 'system',
+        } : null}
+      />
+
       <p className="runtime-announcement sr-only" aria-live="assertive">
         {mutationState === 'accepted' ? mutationMessage : actionError}
       </p>
-      <div className="runtime-live-stamp" aria-hidden="true"><Radio /> LIVE SSE · LOCAL RUNTIME</div>
+      <div className="runtime-live-stamp" aria-hidden="true"><Radio /> {connection.toUpperCase()} SSE · NON-DURABLE RUNTIME</div>
     </main>
   );
 }
