@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET as streamEvents } from '@/app/api/runs/[runId]/events/route';
+import { runtimeRunRepository } from '@/lib/runtime/runtime-run-repository';
 import { runStore } from '@/lib/runtime/run-store';
 
 function context(runId: string) {
@@ -23,6 +24,10 @@ async function firstSseChunk(response: Response) {
 describe('run event stream', () => {
   beforeEach(() => {
     runStore.clearForTests();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('replays only events after Last-Event-ID', async () => {
@@ -109,5 +114,22 @@ describe('run event stream', () => {
     const decoded = new TextDecoder().decode(next.value);
     expect(decoded).toContain(`id: ${nextSequence}`);
     expect(decoded).toContain('human.action.received');
+  });
+
+  it('flushes hosted D1 events in a finite reconnectable SSE checkpoint', async () => {
+    const run = await runStore.createRun({ demoId: 'booking-preparation' });
+    vi.spyOn(runtimeRunRepository, 'persistence').mockResolvedValue('D1_DURABLE');
+
+    const response = await streamEvents(
+      new Request(`http://localhost/api/runs/${run.snapshot.runId}/events?after=0`),
+      context(run.snapshot.runId),
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(body).toContain('event: run-event');
+    expect(body).toContain(`id: ${run.events[0]?.sequence}`);
+    expect(body).toContain('event: stream-checkpoint');
+    expect(body).toContain(`"through":${run.snapshot.lastSequence}`);
   });
 });

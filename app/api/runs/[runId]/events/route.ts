@@ -7,10 +7,21 @@ type Context = { params: Promise<{ runId: string }> | { runId: string } };
 
 const encoder = new TextEncoder();
 
+function eventFrame(event: RunEvent) {
+  return `id: ${event.sequence}\nevent: run-event\ndata: ${JSON.stringify(event)}\n\n`;
+}
+
 function eventChunk(event: RunEvent) {
-  return encoder.encode(
-    `id: ${event.sequence}\nevent: run-event\ndata: ${JSON.stringify(event)}\n\n`,
-  );
+  return encoder.encode(eventFrame(event));
+}
+
+function eventStreamHeaders() {
+  return {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  };
 }
 
 export async function GET(request: Request, context: Context) {
@@ -24,6 +35,23 @@ export async function GET(request: Request, context: Context) {
     const after = Number.isSafeInteger(requestedSequence) && requestedSequence >= 0
       ? requestedSequence
       : 0;
+
+    // Sites currently buffers an open-ended Worker response. A finite SSE
+    // checkpoint flushes immediately, and native EventSource reconnects with
+    // Last-Event-ID to request only later committed D1 events. The protocol is
+    // still ordered SSE; the reconnect is the hosted polling boundary.
+    if (await runtimeRunRepository.persistence() === 'D1_DURABLE') {
+      const events = await runtimeRunRepository.getEventsAfter(runId, after, session.sessionId);
+      const sentThrough = events.at(-1)?.sequence ?? after;
+      const body = [
+        `retry: 1500\n: connected ${runId} after ${after}\n\n`,
+        ...events.map(eventFrame),
+        `event: stream-checkpoint\ndata: ${JSON.stringify({ through: sentThrough })}\n\n`,
+      ].join('');
+      return attachRuntimeSession(new Response(body, {
+        headers: eventStreamHeaders(),
+      }), session.setCookie);
+    }
 
     let unsubscribe: () => void = () => {};
     let heartbeat: ReturnType<typeof setInterval> | undefined;
@@ -102,12 +130,7 @@ export async function GET(request: Request, context: Context) {
     });
 
     return attachRuntimeSession(new Response(stream, {
-      headers: {
-        'Content-Type': 'text/event-stream; charset=utf-8',
-        'Cache-Control': 'no-cache, no-transform',
-        Connection: 'keep-alive',
-        'X-Accel-Buffering': 'no',
-      },
+      headers: eventStreamHeaders(),
     }), session.setCookie);
   } catch (error) {
     return attachRuntimeSession(errorResponse(error), session.setCookie);

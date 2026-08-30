@@ -38,7 +38,7 @@
 
 ## ADR-005 — D1 authority with an explicit local-memory fallback
 
-**Decision:** Keep `InMemoryRunStore` as the deterministic execution engine, but make Sites-managed D1 authoritative for hosted run records. Scope every hosted run to an opaque HttpOnly session, serialize mutations with a short D1 lease, and make hosted SSE replay and poll only committed D1 events. Local subscriptions remain available only to the explicit in-memory preview.
+**Decision:** Keep `InMemoryRunStore` as the deterministic execution engine, but make Sites-managed D1 authoritative for hosted run records. Scope every hosted run to an opaque HttpOnly session, serialize mutations with a short D1 lease, and deliver committed D1 events as finite SSE checkpoints that reconnect with `Last-Event-ID`. Local open-stream subscriptions remain available only to the explicit in-memory preview.
 
 **Reason:** A stateless public Worker can route creation, snapshot, and SSE requests to different instances. D1 preserves the same run across those requests without making the local judge demo or deterministic tests depend on external infrastructure. Explicit Node previews remain visibly non-durable.
 

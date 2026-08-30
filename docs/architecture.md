@@ -62,7 +62,7 @@ sequenceDiagram
     S-->>B: same runId, later revision, obsolete controls removed
 ```
 
-The SSE endpoint uses each event sequence as the SSE `id`, accepts `Last-Event-ID` or the `after` query parameter, sends heartbeat comments, and cleans up on abort. In the hosted D1 runtime, replay plus one-second polling exposes only committed events and a failed poll closes after three attempts so EventSource can reconnect. The explicit in-memory preview subscribes before replay for immediate delivery. The client processes events in order and refreshes the snapshot if it detects a sequence gap. The D1 snapshot is authoritative; SSE is its incremental delivery channel, not a separate execution clock.
+The SSE endpoint uses each event sequence as the SSE `id` and accepts `Last-Event-ID` or the `after` query parameter. Sites buffers open-ended Worker bodies, so hosted D1 delivery returns a finite SSE checkpoint after every ordered replay; native EventSource reconnects with the last received sequence and requests only later committed events. The explicit in-memory preview keeps an open stream, subscribes before replay, sends heartbeats, and cleans up on abort. The client processes events in order and refreshes the snapshot if it detects a sequence gap. The D1 snapshot is authoritative; SSE is its incremental delivery channel, not a separate execution clock.
 
 ## Layered system architecture
 
@@ -202,7 +202,7 @@ Each run has one immutable `runId`, a monotonic event sequence, a monotonic revi
 
 When a flow insertion affects completed downstream work, RouteShift invalidates affected completed and skipped markers, artifacts, connector states, findings, and the prior agent summary before resuming execution. The UI then recompiles from the new snapshot, so obsolete operational surfaces and decision controls leave the DOM.
 
-On Sites, D1 stores the validated flow, materialized snapshot, bounded event history, revision, and session scope. A short conditional lease prevents two stateless requests from mutating one run simultaneously, and a conditional revision update rejects stale commits. Hosted SSE replays and polls committed D1 sequences; the fast same-isolate listener is used only by the non-durable in-memory preview.
+On Sites, D1 stores the validated flow, materialized snapshot, bounded event history, revision, and session scope. A short conditional lease prevents two stateless requests from mutating one run simultaneously, and a conditional revision update rejects stale commits. Hosted SSE sends finite, reconnectable checkpoints containing only committed D1 sequences; the fast same-isolate listener is used only by the non-durable in-memory preview.
 
 The explicit Node preview keeps `InMemoryRunStore` as a non-durable fallback. Hosted D1 is still not a user account or indefinite archive: the anonymous session cookie expires, records are bounded to the demo, and R2 is not configured. Durable Objects would provide actor-native streaming but are not required for this bounded proof.
 

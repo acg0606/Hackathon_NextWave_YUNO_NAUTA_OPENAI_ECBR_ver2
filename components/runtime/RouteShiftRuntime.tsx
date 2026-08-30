@@ -527,6 +527,7 @@ export function RouteShiftRuntime() {
     if (!activeRunId) return;
     const runId = activeRunId;
     let alive = true;
+    let expectedCheckpointClose = false;
     const source = new EventSource(`/api/runs/${encodeURIComponent(runId)}/events?after=${lastSequenceRef.current}`);
 
     function scheduleSnapshotRefresh() {
@@ -568,25 +569,37 @@ export function RouteShiftRuntime() {
       }
     }
 
+    function receiveCheckpoint() {
+      expectedCheckpointClose = true;
+      if (alive && activeRunIdRef.current === runId) setConnection('live');
+    }
+
     source.addEventListener('run-event', receive as EventListener);
+    source.addEventListener('stream-checkpoint', receiveCheckpoint);
     source.onopen = () => {
       if (alive && activeRunIdRef.current === runId) setConnection('live');
     };
     source.onerror = () => {
       if (!alive || activeRunIdRef.current !== runId) return;
+      if (runtimePersistence === 'D1_DURABLE' && expectedCheckpointClose) {
+        expectedCheckpointClose = false;
+        setConnection('live');
+        return;
+      }
       setConnection(source.readyState === EventSource.CLOSED ? 'offline' : 'reconnecting');
     };
 
     return () => {
       alive = false;
       source.removeEventListener('run-event', receive as EventListener);
+      source.removeEventListener('stream-checkpoint', receiveCheckpoint);
       source.close();
       if (refreshTimerRef.current !== null) {
         window.clearTimeout(refreshTimerRef.current);
         refreshTimerRef.current = null;
       }
     };
-  }, [activeRunId, fetchRun, streamEpoch]);
+  }, [activeRunId, fetchRun, runtimePersistence, streamEpoch]);
 
   const createRun = useCallback(async (body: JsonObject, busyId: string) => {
     setFatalError(null);
