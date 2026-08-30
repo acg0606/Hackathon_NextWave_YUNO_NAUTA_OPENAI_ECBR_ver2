@@ -337,7 +337,10 @@ function projectAmount(value: unknown): z.input<typeof responseAmountSchema> {
   } as z.input<typeof responseAmountSchema>;
 }
 
-function projectPaymentLink(value: unknown): YunoSandboxPaymentLink {
+function projectPaymentLink(
+  value: unknown,
+  requested: { merchantOrderId: string; capture: boolean; oneTimeUse: boolean },
+): YunoSandboxPaymentLink {
   const raw = asRecord(value, 'payment link response');
   return parseStrict(
     yunoPaymentLinkSchema,
@@ -345,12 +348,12 @@ function projectPaymentLink(value: unknown): YunoSandboxPaymentLink {
       linkCode: raw.code ?? raw.id,
       ...(optionalString(raw.merchant_order_id)
         ? { merchantOrderId: raw.merchant_order_id }
-        : {}),
-      status: raw.status,
-      checkoutUrl: raw.redirect_url,
+        : { merchantOrderId: requested.merchantOrderId }),
+      status: raw.status === 'CANCELLED' ? 'CANCELED' : raw.status,
+      checkoutUrl: raw.checkout_url ?? raw.redirect_url,
       amount: projectAmount(raw.amount),
-      capture: raw.capture ?? true,
-      oneTimeUse: raw.one_time_use ?? false,
+      capture: raw.capture ?? requested.capture,
+      oneTimeUse: raw.one_time_use ?? requested.oneTimeUse,
     },
     'payment link response',
   );
@@ -538,7 +541,14 @@ export class YunoSandboxClient {
           : {}),
       },
     });
-    return envelope(projectPaymentLink(result), this.#now);
+    return envelope(
+      projectPaymentLink(result, {
+        merchantOrderId: validated.merchantOrderId,
+        capture: validated.capture,
+        oneTimeUse: validated.oneTimeUse,
+      }),
+      this.#now,
+    );
   }
 
   async retrievePaymentsByMerchantOrderId(input: YunoRetrieveByMerchantOrderInput) {

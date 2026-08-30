@@ -118,6 +118,38 @@ describe('YunoSandboxClient', () => {
     expect(JSON.stringify(result)).not.toContain('unexpected');
   });
 
+  it('accepts the current documented payment-link response shape', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        code: LINK_ID,
+        status: 'CREATED',
+        checkout_url: `https://checkout.y.uno/payment_links/${LINK_ID}`,
+        amount: { value: 5000, currency: 'USD' },
+        created_at: '2026-08-30T12:00:00Z',
+      }),
+    );
+
+    const result = await client(fetchMock).createPaymentLink({
+      idempotencyKey: IDEMPOTENCY_KEY,
+      merchantOrderId: 'RS-NW26-014',
+      description: 'RouteShift order RS-NW26-014',
+      country: 'US',
+      amount: { value: 5000, currency: 'USD' },
+      capture: false,
+      oneTimeUse: true,
+    });
+
+    expect(result.data).toEqual({
+      linkCode: LINK_ID,
+      merchantOrderId: 'RS-NW26-014',
+      status: 'CREATED',
+      checkoutUrl: `https://checkout.y.uno/payment_links/${LINK_ID}`,
+      amount: { value: 5000, currency: 'USD' },
+      capture: false,
+      oneTimeUse: true,
+    });
+  });
+
   it('retrieves payments independently by merchant order ID and payment ID', async () => {
     const fetchMock = vi
       .fn()
