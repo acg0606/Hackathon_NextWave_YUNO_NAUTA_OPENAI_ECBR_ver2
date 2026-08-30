@@ -80,6 +80,32 @@ describe('run API routes', () => {
     });
   });
 
+  it('deduplicates a replay creation retry within the same browser session', async () => {
+    const idempotencyKey = crypto.randomUUID();
+    const firstResponse = await createRun(
+      jsonRequest('http://localhost/api/runs', {
+        demoId: 'unexpected-transshipment',
+        label: 'Historical replay — retry proof',
+        idempotencyKey,
+      }),
+    );
+    const first = await readRunBody(firstResponse);
+    const cookie = firstResponse.headers.get('set-cookie')?.split(';')[0];
+    if (!cookie) throw new Error('The run response did not establish a browser session.');
+
+    const retryRequest = jsonRequest('http://localhost/api/runs', {
+      demoId: 'unexpected-transshipment',
+      label: 'Historical replay — retry proof',
+      idempotencyKey,
+    });
+    retryRequest.headers.set('cookie', cookie);
+    const retryResponse = await createRun(retryRequest);
+    const retry = await readRunBody(retryResponse);
+
+    expect(retry.runId).toBe(first.runId);
+    expect(retry.revision).toBe(first.revision);
+  });
+
   it('rejects stale decisions, resumes the same run, and deduplicates retries', async () => {
     const createdResponse = await createRun(
       jsonRequest('http://localhost/api/runs', { demoId: 'booking-preparation' }),

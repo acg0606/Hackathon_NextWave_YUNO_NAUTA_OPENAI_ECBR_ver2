@@ -37,7 +37,7 @@ Product selection; a fixed Shanghai origin and editable destination coordinates 
 - The deterministic runtime and judge demonstration never require an API key.
 - An allowlisted semantic renderer accepts validated UI specifications, never generated executable code.
 - Human actions resume the same run and are protected by revision and idempotency checks.
-- The first local runtime uses explicitly non-durable process memory behind a replaceable store interface.
+- The hosted runtime stores bounded, session-isolated runs in Sites-managed D1. Explicit Node previews use the same engine with a clearly labeled non-durable in-memory adapter.
 - The local prototype does not depend on AIS or OpenSky; live telemetry can be added after the core experience is proven.
 - Do not clone DHL, Loggi, or another carrier. Build original, recognizably different interface languages for ocean, air express, and last mile.
 - The experience must work with keyboard, touch, reduced motion, and a readable non-WebGL fallback.

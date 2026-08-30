@@ -58,7 +58,7 @@ Confirm that the run ID is unchanged and the obsolete comparison controls left t
 
 ## 4:20 — Prove repeatability and safety
 
-Insert the same semantic step with another generated ID. Then run an AIR shipment and show `step.skipped`. Mention strict schemas, finite capabilities, stale-revision rejection, idempotency, and non-durable local storage.
+Insert the same semantic step with another generated ID. Then run an AIR shipment and show `step.skipped`. Mention strict schemas, finite capabilities, stale-revision rejection, idempotency, hosted D1 durability, and the clearly labeled local-memory preview fallback.
 
 ## 4:50 — Close
 

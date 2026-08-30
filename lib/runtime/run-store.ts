@@ -710,6 +710,21 @@ export class InMemoryRunStore implements RunStore {
   clearForTests() {
     this.records.clear();
   }
+
+  restoreRun(stored: StoredRun, force = false) {
+    const validatedFlow = flowDefinitionSchema.parse(stored.flow) as FlowDefinition;
+    const validatedSnapshot = runSnapshotSchema.parse(stored.snapshot) as RunSnapshot;
+    const existing = this.records.get(validatedSnapshot.runId);
+    if (!force && existing && existing.snapshot.revision >= validatedSnapshot.revision) return;
+    this.records.set(validatedSnapshot.runId, {
+      flow: structuredClone(validatedFlow),
+      snapshot: structuredClone(validatedSnapshot),
+      events: structuredClone(stored.events),
+      label: stored.label.slice(0, 160),
+      listeners: existing?.listeners ?? new Set(),
+      queue: existing?.queue ?? Promise.resolve(),
+    });
+  }
 }
 
 const globalStore = globalThis as typeof globalThis & {

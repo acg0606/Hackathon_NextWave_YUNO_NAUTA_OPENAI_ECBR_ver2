@@ -75,4 +75,39 @@ describe('run event stream', () => {
     await reader.cancel();
     expect(new TextDecoder().decode(first.value)).toContain(': connected');
   });
+
+  it('streams a newly committed memory event after the initial replay', async () => {
+    const run = await runStore.createRun({ demoId: 'unexpected-transshipment' });
+    const response = await streamEvents(
+      new Request(
+        `http://localhost/api/runs/${run.snapshot.runId}/events?after=${run.snapshot.lastSequence}`,
+      ),
+      context(run.snapshot.runId),
+    );
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('SSE response did not expose a readable stream.');
+
+    const first = await reader.read();
+    expect(new TextDecoder().decode(first.value)).toContain(': connected');
+
+    const pending = run.snapshot.pendingDecision;
+    if (!pending) throw new Error('The disruption run did not expose its human decision.');
+    const action = pending.actions[0];
+    if (!action) throw new Error('The disruption decision did not expose a permitted action.');
+    const nextSequence = run.snapshot.lastSequence + 1;
+    const readNext = reader.read();
+    await runStore.submitAction(run.snapshot.runId, {
+      runId: run.snapshot.runId,
+      decisionId: pending.decisionId,
+      actionId: action.actionId,
+      expectedRevision: run.snapshot.revision,
+      idempotencyKey: `sse-live-${crypto.randomUUID()}`,
+    });
+
+    const next = await readNext;
+    await reader.cancel();
+    const decoded = new TextDecoder().decode(next.value);
+    expect(decoded).toContain(`id: ${nextSequence}`);
+    expect(decoded).toContain('human.action.received');
+  });
 });

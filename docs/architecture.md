@@ -33,7 +33,7 @@ sequenceDiagram
     autonumber
     participant B as Browser / RouteShiftRuntime
     participant API as Run API
-    participant S as InMemoryRunStore
+    participant S as RuntimeRunRepository / D1
     participant E as FlowEngine
     participant A as Agent or registered tool
     participant R as RunReducer
@@ -62,7 +62,7 @@ sequenceDiagram
     S-->>B: same runId, later revision, obsolete controls removed
 ```
 
-The SSE endpoint uses each event sequence as the SSE `id`, accepts `Last-Event-ID` or the `after` query parameter, replays missed events before subscribing, sends heartbeat comments, and closes its subscription on abort. The client processes events in order and refreshes the snapshot if it detects a sequence gap. The snapshot is authoritative; SSE is its incremental delivery channel, not a separate execution clock.
+The SSE endpoint uses each event sequence as the SSE `id`, accepts `Last-Event-ID` or the `after` query parameter, sends heartbeat comments, and cleans up on abort. In the hosted D1 runtime, replay plus one-second polling exposes only committed events and a failed poll closes after three attempts so EventSource can reconnect. The explicit in-memory preview subscribes before replay for immediate delivery. The client processes events in order and refreshes the snapshot if it detects a sequence gap. The D1 snapshot is authoritative; SSE is its incremental delivery channel, not a separate execution clock.
 
 ## Layered system architecture
 
@@ -89,7 +89,8 @@ flowchart TB
 
     subgraph RUNTIME["Server runtime"]
         SCHEMA["Strict Zod schemas and allowlists"]
-        STORE["InMemoryRunStore<br/>per-run serialized mutation"]
+        STORE["RuntimeRunRepository<br/>D1 authority + mutation lease"]
+        MEMORY["InMemoryRunStore<br/>deterministic engine record"]
         ENGINE["Generic FlowEngine"]
         EVENTLOG["Append-only public RunEvents"]
         REDUCER["Pure RunReducer"]
@@ -98,10 +99,10 @@ flowchart TB
         SPEC["Validated RuntimeUISpec"]
         PUBLIC["Public-event sanitizer<br/>no chain-of-thought"]
 
-        SCHEMA --> STORE
-        STORE --> ENGINE
+        SCHEMA --> STORE --> MEMORY
+        MEMORY --> ENGINE
         ENGINE --> PUBLIC --> EVENTLOG --> REDUCER --> SNAP --> COMPILER --> SPEC
-        SPEC --> STORE
+        SPEC --> MEMORY --> STORE
     end
 
     subgraph AGENTS["Agent layer"]
@@ -167,7 +168,8 @@ Yuno is `EXTERNAL_SANDBOX` only when the external Test Mode response is validate
 - `lib/runtime/flow-engine.ts` evaluates conditions and executes generic step semantics from kind, capabilities, inputs, and registered tools.
 - `lib/runtime/public-events.ts` removes non-public material and enforces the public/private reasoning boundary.
 - `lib/runtime/reducer.ts` is the pure, replayable fold from ordered events to state.
-- `lib/runtime/run-store.ts` owns process-local runs, subscriptions, idempotency, and per-run serialization.
+- `lib/runtime/run-store.ts` owns deterministic execution records, idempotency, and same-isolate subscriptions.
+- `lib/runtime/runtime-run-repository.ts` makes D1 authoritative when bound, scopes runs to one browser session, leases mutations, and hydrates the deterministic engine. Explicit Node previews use the in-memory fallback.
 - `lib/runtime/ui-compiler.ts` maps capabilities, current state, and validated output shapes to a bounded UI specification.
 - `components/runtime/component-registry.tsx` is the finite rendering authority.
 - `components/runtime/RouteShiftRuntime.tsx` creates or attaches to runs, maintains isolated client state per run, and synchronizes through snapshots and SSE.
@@ -194,13 +196,15 @@ Determined at runtime are:
 
 The agent may classify a bounded natural-language instruction, compare structured documents, report public findings and confidence, and recommend one permitted action. It cannot choose React components, markup, CSS, imports, executable code, arbitrary tools, arbitrary URLs, or private reasoning content.
 
-## Determinism, isolation, and current persistence limit
+## Determinism, isolation, and persistence
 
 Each run has one immutable `runId`, a monotonic event sequence, a monotonic revision, a flow version, an event history, and a materialized snapshot. Per-run changes are serialized, and the store keeps separate records and listeners for simultaneous runs. Replaying the same validated events reconstructs a deeply equal snapshot.
 
 When a flow insertion affects completed downstream work, RouteShift invalidates affected completed and skipped markers, artifacts, connector states, findings, and the prior agent summary before resuming execution. The UI then recompiles from the new snapshot, so obsolete operational surfaces and decision controls leave the DOM.
 
-`InMemoryRunStore` is deliberately **non-durable and single-process**. Runs, events, idempotency records, and active SSE subscriptions are lost when the process restarts and are not shared across replicas. D1 and R2 are not configured, and this repository does not claim production persistence or distributed coordination. The `RunStore` interface is the seam for a future Durable Object or D1-backed adapter; implementing that adapter is outside the current hackathon proof.
+On Sites, D1 stores the validated flow, materialized snapshot, bounded event history, revision, and session scope. A short conditional lease prevents two stateless requests from mutating one run simultaneously, and a conditional revision update rejects stale commits. Hosted SSE replays and polls committed D1 sequences; the fast same-isolate listener is used only by the non-durable in-memory preview.
+
+The explicit Node preview keeps `InMemoryRunStore` as a non-durable fallback. Hosted D1 is still not a user account or indefinite archive: the anonymous session cookie expires, records are bounded to the demo, and R2 is not configured. Durable Objects would provide actor-native streaming but are not required for this bounded proof.
 
 ## Why the finite registry matters
 

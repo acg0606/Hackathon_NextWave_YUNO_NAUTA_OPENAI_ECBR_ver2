@@ -8,6 +8,7 @@ import {
 import { isSafeEvidenceUrl } from '@/lib/runtime/safe-url';
 import {
   jsonObjectSchema,
+  provenanceSchema,
   runEventSchema,
   runtimeArtifactSchema,
   safeHttpsUrlSchema,
@@ -95,6 +96,12 @@ describe('runtime security boundary', () => {
           sourceUrl: scenario.sourceUrl,
         },
       );
+      expect(provenanceSchema.parse({
+        classification: 'HISTORICAL_FACT',
+        sourceTitle: scenario.sourceLabel,
+        sourceUrl: scenario.sourceUrl,
+        eventDate: scenario.eventStartDate,
+      }).eventDate).toBe(scenario.eventStartDate);
     }
 
     const artifact = runtimeArtifactSchema.parse({

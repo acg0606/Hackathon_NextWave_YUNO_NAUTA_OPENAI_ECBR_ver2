@@ -30,7 +30,9 @@ Only canonical HTTPS URLs on the finite source allowlist may be rendered. The Yu
 
 ## Persistence
 
-The current store is process-local and non-durable. Restarting the process removes runs. This limitation prevents production durability claims and avoids implying that D1 or R2 is configured.
+Hosted runs are stored in Sites-managed D1 and every query includes an opaque `routeshift_session` identifier held in an HttpOnly, Secure, SameSite=Lax cookie. A visitor cannot list or fetch another session's runs by guessing a `runId`; scope mismatches return 404. Mutations acquire a bounded D1 lease and commit only against the expected revision. Hosted SSE replays and polls only committed D1 events, so reconnecting clients can recover missed sequences after a Worker changes without observing a mutation that later rolls back. Same-isolate subscriptions are limited to the explicit in-memory preview.
+
+This is hackathon durability, not an account system. The cookie expires, there is no identity recovery or multi-device history, records are intentionally bounded, and explicit Node previews fall back to labeled process memory. R2 is not configured.
 
 ## External and mock side effects
 

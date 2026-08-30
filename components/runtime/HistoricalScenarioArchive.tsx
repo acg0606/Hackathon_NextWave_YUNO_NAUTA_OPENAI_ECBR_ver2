@@ -1,28 +1,46 @@
 'use client';
 
-import { ArrowRight, ExternalLink, Newspaper, Search, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowRight,
+  ExternalLink,
+  LoaderCircle,
+  Newspaper,
+  Search,
+  X,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { scenarios, type Scenario } from '@/app/scenarios';
 import { TruthBadge } from './runtime-primitives';
 
 export type HistoricalScenarioArchiveProps = {
   open: boolean;
-  busyScenarioId?: string | null;
+  replayFeedback:
+    | { state: 'idle' }
+    | { state: 'creating'; scenarioId: string; scenarioName: string; idempotencyKey: string }
+    | { state: 'error'; scenarioId: string; scenarioName: string; idempotencyKey: string; message: string };
   selectedScenarioId?: string | null;
+  restoreFocusOnClose?: boolean;
   onClose: () => void;
   onReplay: (scenario: Scenario) => void;
 };
 
 export function HistoricalScenarioArchive({
   open,
-  busyScenarioId,
+  replayFeedback,
   selectedScenarioId,
+  restoreFocusOnClose = true,
   onClose,
   onReplay,
 }: HistoricalScenarioArchiveProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const restoreFocusRef = useRef(restoreFocusOnClose);
   const [query, setQuery] = useState('');
+
+  useEffect(() => {
+    restoreFocusRef.current = restoreFocusOnClose;
+  }, [restoreFocusOnClose]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -35,13 +53,21 @@ export function HistoricalScenarioArchive({
     if (!open && dialog.open) dialog.close();
   }, [open]);
 
-  useEffect(() => () => previousFocusRef.current?.focus(), []);
+  useEffect(() => () => {
+    if (restoreFocusRef.current) previousFocusRef.current?.focus();
+  }, []);
 
   const filtered = scenarios.filter((scenario) => (
     `${scenario.shortName} ${scenario.category} ${scenario.place} ${scenario.year}`
       .toLowerCase()
       .includes(query.toLowerCase())
   ));
+  const busyScenarioId = replayFeedback.state === 'creating'
+    ? replayFeedback.scenarioId
+    : null;
+  const failedScenario = replayFeedback.state === 'error'
+    ? scenarios.find((scenario) => scenario.id === replayFeedback.scenarioId)
+    : null;
 
   return (
     <dialog
@@ -54,7 +80,7 @@ export function HistoricalScenarioArchive({
       }}
       onClose={() => {
         setQuery('');
-        previousFocusRef.current?.focus();
+        if (restoreFocusRef.current) previousFocusRef.current?.focus();
       }}
     >
       <header>
@@ -71,7 +97,39 @@ export function HistoricalScenarioArchive({
         <div><Search aria-hidden="true" /><input id="historical-archive-search" value={query} onChange={(event) => setQuery(event.target.value)} /></div>
       </label>
 
-      <div className="runtime-scenario-grid">
+      {replayFeedback.state !== 'idle' ? (
+        <section
+          aria-live={replayFeedback.state === 'error' ? 'assertive' : 'polite'}
+          className={`runtime-replay-feedback is-${replayFeedback.state}`}
+          id="historical-replay-status"
+          role={replayFeedback.state === 'error' ? 'alert' : 'status'}
+        >
+          {replayFeedback.state === 'creating' ? (
+            <LoaderCircle aria-hidden="true" className="runtime-replay-feedback__spinner" />
+          ) : (
+            <AlertTriangle aria-hidden="true" />
+          )}
+          <div>
+            <strong>
+              {replayFeedback.state === 'creating'
+                ? `Building the ${replayFeedback.scenarioName} replay`
+                : `The ${replayFeedback.scenarioName} replay did not start`}
+            </strong>
+            <span>
+              {replayFeedback.state === 'creating'
+                ? 'Creating an isolated simulated run and composing its incident workspace. Keep this window open for a moment.'
+                : replayFeedback.message}
+            </span>
+          </div>
+          {replayFeedback.state === 'error' && failedScenario ? (
+            <button type="button" onClick={() => onReplay(failedScenario)}>
+              Try again <ArrowRight aria-hidden="true" />
+            </button>
+          ) : null}
+        </section>
+      ) : null}
+
+      <div className="runtime-scenario-grid" aria-busy={busyScenarioId ? 'true' : undefined}>
         {filtered.map((scenario, index) => (
           <article
             aria-current={selectedScenarioId === scenario.id ? 'true' : undefined}
@@ -88,17 +146,33 @@ export function HistoricalScenarioArchive({
               <a href={scenario.sourceUrl} target="_blank" rel="noreferrer noopener" aria-label={`Open source for ${scenario.shortName}`}>
                 Source <ExternalLink aria-hidden="true" />
               </a>
-              <button disabled={Boolean(busyScenarioId)} type="button" onClick={() => onReplay(scenario)}>
-                {busyScenarioId === scenario.id ? 'Creating…' : 'Replay now'} <ArrowRight aria-hidden="true" />
+              <button
+                aria-busy={busyScenarioId === scenario.id ? 'true' : undefined}
+                aria-describedby={busyScenarioId === scenario.id ? 'historical-replay-status' : undefined}
+                aria-label={busyScenarioId === scenario.id
+                  ? `Creating replay for ${scenario.shortName}`
+                  : `Replay ${scenario.shortName} now`}
+                disabled={Boolean(busyScenarioId)}
+                type="button"
+                onClick={() => onReplay(scenario)}
+              >
+                {busyScenarioId === scenario.id ? (
+                  <><LoaderCircle aria-hidden="true" className="runtime-replay-feedback__spinner" /> Building replay…</>
+                ) : (
+                  <>Replay now <ArrowRight aria-hidden="true" /></>
+                )}
               </button>
             </div>
           </article>
         ))}
+        {filtered.length === 0 ? (
+          <p className="runtime-scenario-grid__empty">No disruption matches this search. Try a place, year, or event name.</p>
+        ) : null}
       </div>
 
       <footer>
         <TruthBadge truth="SIMULATED_IF_TODAY" />
-        <span>A replay creates a new isolated in-memory run. It causes no external booking or payment action.</span>
+        <span>A replay creates a new isolated simulated run. It causes no external booking or payment action.</span>
       </footer>
     </dialog>
   );

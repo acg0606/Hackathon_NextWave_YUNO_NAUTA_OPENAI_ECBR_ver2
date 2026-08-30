@@ -19,6 +19,7 @@ import airInstrumentGhost from '../../assets/plates/air-instrument-ghost.png';
 import stageEnvironment from '../../assets/plates/stage-environment.png';
 import { LiveEarth, type Coordinates, type RoutePointViewModel, type RouteViewModel } from '@/app/LiveEarth';
 import type { Scenario } from '@/app/scenarios';
+import { buildHistoricalReplaySeed } from '@/lib/demo/historical-replay';
 import {
   appendRunEvent,
   eventsForRun,
@@ -39,6 +40,7 @@ import { FlowGraph } from './FlowGraph';
 import { FlowMutationLab, type FlowMutationRequest } from './FlowMutationLab';
 import { ArchitecturePanel } from './ArchitecturePanel';
 import { HistoricalScenarioArchive } from './HistoricalScenarioArchive';
+import type { HistoricalScenarioArchiveProps } from './HistoricalScenarioArchive';
 import { IntegrationStatusPanel } from './IntegrationStatusPanel';
 import { PublicEventFeed, type RuntimeConnectionState } from './PublicEventFeed';
 import {
@@ -62,8 +64,8 @@ type RunListItem = {
 };
 
 type RunListResponse = {
-  persistence: 'IN_MEMORY_NON_DURABLE';
-  singleProcess: true;
+  persistence: 'D1_DURABLE' | 'IN_MEMORY_NON_DURABLE';
+  singleProcess: boolean;
   runs: RunListItem[];
 };
 
@@ -76,7 +78,7 @@ type RunResponse = {
   eventsUrl: string;
   snapshot: RunSnapshot;
   flow: FlowDefinition;
-  persistence?: 'IN_MEMORY_NON_DURABLE';
+  persistence?: 'D1_DURABLE' | 'IN_MEMORY_NON_DURABLE';
   mutation?: { operation: string; insertedStepId: string; title: string };
   climax?: string;
   agentExecution?: {
@@ -90,6 +92,8 @@ type RunResponse = {
 };
 
 type ApiErrorBody = { error?: { message?: string } };
+
+type ReplayFeedback = HistoricalScenarioArchiveProps['replayFeedback'];
 
 const fallbackRoute: RouteViewModel = {
   id: 'routeshift-default-route',
@@ -294,11 +298,26 @@ function sceneClass(snapshot: RunSnapshot | null) {
   return 'runtime-scene--operation';
 }
 
-async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
-  const body = await response.json() as T & ApiErrorBody;
-  if (!response.ok) throw new Error(body.error?.message ?? `RouteShift request failed with HTTP ${response.status}.`);
-  return body;
+async function apiJson<T>(url: string, init?: RequestInit, timeoutMs = 30_000): Promise<T> {
+  const controller = new AbortController();
+  const upstreamSignal = init?.signal;
+  const abortFromUpstream = () => controller.abort(upstreamSignal?.reason);
+  upstreamSignal?.addEventListener('abort', abortFromUpstream, { once: true });
+  const timeout = window.setTimeout(() => controller.abort('RouteShift request timeout'), timeoutMs);
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    const body = await response.json() as T & ApiErrorBody;
+    if (!response.ok) throw new Error(body.error?.message ?? `RouteShift request failed with HTTP ${response.status}.`);
+    return body;
+  } catch (error) {
+    if (controller.signal.aborted && !upstreamSignal?.aborted) {
+      throw new Error('The runtime took too long to respond. Check the connection and try again.');
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+    upstreamSignal?.removeEventListener('abort', abortFromUpstream);
+  }
 }
 
 function asRunSummary(item: RunListItem, flow?: FlowDefinition | null): RuntimeRunSummary {
@@ -332,48 +351,6 @@ function eventEvidenceSupportsRecomposition(events: RunEvent[]) {
   const eventsAfterChange = events.slice(flowChangeIndex);
   return eventsAfterChange.some((event) => event.type === 'step.discovered')
     && eventsAfterChange.some((event) => event.type === 'ui.spec.emitted');
-}
-
-function scenarioSeed(scenario: Scenario): JsonObject {
-  return {
-    customer: {
-      name: 'Muebles del Sur',
-      contact: 'Lucía Herrera',
-    },
-    shipment: {
-      orderId: `RS-NW26-${scenario.id.replace('EVT-', '')}`,
-      scenarioId: scenario.id,
-      transportMode: scenario.modeBefore,
-      origin: scenario.origin,
-      destination: scenario.destination,
-      disruption: scenario.shortName,
-      route: scenario.routeAfter,
-      promise: scenario.promise,
-      product: scenario.product,
-    },
-    historicalEvidence: {
-      scenarioId: scenario.id,
-      title: scenario.shortName,
-      headline: scenario.headline,
-      summary: scenario.historicalImpact,
-      eventDate: scenario.date,
-      sourceTitle: scenario.sourceLabel,
-      sourceUrl: scenario.sourceUrl,
-      classification: 'HISTORICAL_FACT',
-    },
-    currentContext: {
-      classification: 'UNKNOWN',
-      status: 'Not fetched for this deterministic replay',
-    },
-    simulatedResponse: {
-      route: scenario.routeAfter,
-      recommendation: scenario.recommendation,
-      etaDelta: scenario.etaDelta,
-      costDelta: scenario.costDelta,
-      documentChange: scenario.documentChange,
-      classification: 'SIMULATED_IF_TODAY',
-    },
-  };
 }
 
 function orderSeed(configuration: OrderConfiguration): JsonObject {
@@ -448,6 +425,7 @@ export function RouteShiftRuntime() {
   const [flow, setFlow] = useState<FlowDefinition | null>(null);
   const [eventsByRunId, setEventsByRunId] = useState<RunEventCache>({});
   const [connection, setConnection] = useState<RuntimeConnectionState>('connecting');
+  const [runtimePersistence, setRuntimePersistence] = useState<'D1_DURABLE' | 'IN_MEMORY_NON_DURABLE'>('IN_MEMORY_NON_DURABLE');
   const [loading, setLoading] = useState(true);
   const [fatalError, setFatalError] = useState<string | null>(null);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
@@ -455,10 +433,12 @@ export function RouteShiftRuntime() {
   const [mutationState, setMutationState] = useState<'idle' | 'submitting' | 'accepted' | 'error'>('idle');
   const [mutationMessage, setMutationMessage] = useState<string | null>(null);
   const [busyPreset, setBusyPreset] = useState<string | null>(null);
-  const [busyScenarioId, setBusyScenarioId] = useState<string | null>(null);
+  const [replayFeedback, setReplayFeedback] = useState<ReplayFeedback>({ state: 'idle' });
+  const [replayNotice, setReplayNotice] = useState<{ scenarioName: string; runId: string } | null>(null);
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
   const [runSelectorOpen, setRunSelectorOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [restoreArchiveFocus, setRestoreArchiveFocus] = useState(true);
   const [integrationOpen, setIntegrationOpen] = useState(false);
   const [architectureOpen, setArchitectureOpen] = useState(false);
   const [streamEpoch, setStreamEpoch] = useState(0);
@@ -466,6 +446,7 @@ export function RouteShiftRuntime() {
   const lastSequenceRef = useRef(0);
   const lastSequenceByRunRef = useRef<Record<string, number>>({});
   const refreshTimerRef = useRef<number | null>(null);
+  const busyScenarioRef = useRef<string | null>(null);
   const events = eventsForRun(eventsByRunId, activeRunId);
 
   const activateRun = useCallback((runId: string) => {
@@ -487,6 +468,7 @@ export function RouteShiftRuntime() {
     if (activeRunIdRef.current === runId) {
       setSnapshot(response.snapshot);
       setFlow(response.flow);
+      if (response.persistence) setRuntimePersistence(response.persistence);
     }
     setRunItems((current) => upsertRunList(current, response));
     return response;
@@ -495,6 +477,7 @@ export function RouteShiftRuntime() {
   const loadRunList = useCallback(async () => {
     const response = await apiJson<RunListResponse>('/api/runs');
     setRunItems(response.runs);
+    setRuntimePersistence(response.persistence);
     const current = activeRunIdRef.current;
     const next = current && response.runs.some((run) => run.runId === current)
         ? current
@@ -612,6 +595,7 @@ export function RouteShiftRuntime() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+    if (response.persistence) setRuntimePersistence(response.persistence);
     setRunItems((current) => upsertRunList(current, response));
     activateRun(response.runId);
     setSnapshot(response.snapshot);
@@ -638,19 +622,44 @@ export function RouteShiftRuntime() {
   }, [createRun]);
 
   const handleReplayScenario = useCallback((scenario: Scenario) => {
-    setBusyScenarioId(scenario.id);
+    if (busyScenarioRef.current) return;
+    busyScenarioRef.current = scenario.id;
+    const idempotencyKey = replayFeedback.state === 'error' && replayFeedback.scenarioId === scenario.id
+      ? replayFeedback.idempotencyKey
+      : crypto.randomUUID();
+    setReplayFeedback({
+      state: 'creating',
+      scenarioId: scenario.id,
+      scenarioName: scenario.shortName,
+      idempotencyKey,
+    });
+    setReplayNotice(null);
     void createRun({
       demoId: 'unexpected-transshipment',
       label: `Historical replay — ${scenario.shortName}`,
-      seed: scenarioSeed(scenario),
+      idempotencyKey,
+      seed: buildHistoricalReplaySeed(scenario),
     }, scenario.id)
-      .then(() => {
+      .then(({ response }) => {
         setSelectedScenarioId(scenario.id);
+        setReplayFeedback({ state: 'idle' });
+        setReplayNotice({ scenarioName: scenario.shortName, runId: response.runId });
+        setRestoreArchiveFocus(false);
         setArchiveOpen(false);
       })
-      .catch((error: unknown) => setFatalError(error instanceof Error ? error.message : 'The historical replay could not be created.'))
-      .finally(() => setBusyScenarioId(null));
-  }, [createRun]);
+      .catch((error: unknown) => setReplayFeedback({
+        state: 'error',
+        scenarioId: scenario.id,
+        scenarioName: scenario.shortName,
+        idempotencyKey,
+        message: error instanceof Error
+          ? `${error.message} Your selection is preserved; try again.`
+          : 'The public runtime could not create this replay. Your selection is preserved; try again.',
+      }))
+      .finally(() => {
+        busyScenarioRef.current = null;
+      });
+  }, [createRun, replayFeedback]);
 
   const handleAction = useCallback((action: AllowedAction, context?: RuntimeActionContext) => {
     if (!snapshot || !activeRunId) return;
@@ -679,6 +688,7 @@ export function RouteShiftRuntime() {
         if (activeRunIdRef.current !== activeRunId) return;
         setSnapshot(response.snapshot);
         setFlow(response.flow);
+        if (response.persistence) setRuntimePersistence(response.persistence);
       })
       .catch((error: unknown) => {
         if (activeRunIdRef.current !== activeRunId) return;
@@ -710,6 +720,7 @@ export function RouteShiftRuntime() {
         if (activeRunIdRef.current !== activeRunId) return;
         setSnapshot(response.snapshot);
         setFlow(response.flow);
+        if (response.persistence) setRuntimePersistence(response.persistence);
         setMutationState('accepted');
         const provider = response.agentExecution?.providerMode === 'live'
           ? `OpenAI structured output · ${response.agentExecution.model ?? response.agentExecution.providerId}`
@@ -763,6 +774,7 @@ export function RouteShiftRuntime() {
             <Layers3 aria-hidden="true" /> Runs <span>{runItems.length}</span>
           </button>
           <button type="button" onClick={() => {
+            setRestoreArchiveFocus(true);
             setArchiveOpen(true);
             setRunSelectorOpen(false);
             setIntegrationOpen(false);
@@ -816,7 +828,12 @@ export function RouteShiftRuntime() {
             }}
             runs={runSummaries}
           />
-          <footer><Database aria-hidden="true" /> Demo runs are process-local and non-durable.</footer>
+          <footer>
+            <Database aria-hidden="true" />
+            {runtimePersistence === 'D1_DURABLE'
+              ? 'Runs are isolated to this browser session and stored durably.'
+              : 'Local preview runs are process-local and non-durable.'}
+          </footer>
         </aside>
       ) : null}
 
@@ -861,6 +878,16 @@ export function RouteShiftRuntime() {
         {actionError ? <p className="runtime-global-error" role="alert">{actionError}</p> : null}
       </section>
 
+      {replayNotice ? (
+        <output className="runtime-replay-notice" aria-live="polite" aria-atomic="true">
+          <div>
+            <strong>Replay ready — {replayNotice.scenarioName}</strong>
+            <span>Run {replayNotice.runId} is active. The interface has moved to its incident workspace.</span>
+          </div>
+          <button type="button" onClick={() => setReplayNotice(null)} aria-label="Dismiss replay confirmation"><X aria-hidden="true" /></button>
+        </output>
+      ) : null}
+
       {snapshot && flow ? (
         <>
           <FlowMutationLab
@@ -877,10 +904,14 @@ export function RouteShiftRuntime() {
       ) : null}
 
       <HistoricalScenarioArchive
-        busyScenarioId={busyScenarioId}
-        onClose={() => setArchiveOpen(false)}
+        replayFeedback={replayFeedback}
+        onClose={() => {
+          if (replayFeedback.state !== 'creating') setReplayFeedback({ state: 'idle' });
+          setArchiveOpen(false);
+        }}
         onReplay={handleReplayScenario}
         open={archiveOpen}
+        restoreFocusOnClose={restoreArchiveFocus}
         selectedScenarioId={selectedScenarioId}
       />
 
@@ -907,7 +938,9 @@ export function RouteShiftRuntime() {
       <p className="runtime-announcement sr-only" aria-live="assertive">
         {mutationState === 'accepted' ? mutationMessage : actionError}
       </p>
-      <div className="runtime-live-stamp" aria-hidden="true"><Radio /> {connection.toUpperCase()} SSE · NON-DURABLE RUNTIME</div>
+      <div className="runtime-live-stamp" aria-hidden="true">
+        <Radio /> {connection.toUpperCase()} SSE · {runtimePersistence === 'D1_DURABLE' ? 'DURABLE RUN' : 'LOCAL MEMORY'}
+      </div>
     </main>
   );
 }

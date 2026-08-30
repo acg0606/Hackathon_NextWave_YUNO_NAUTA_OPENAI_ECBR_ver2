@@ -5,30 +5,33 @@ import {
   RunConflictError,
   RunInputError,
   RunNotFoundError,
-  runStore,
   type StoredRun,
 } from '@/lib/runtime/run-store';
+import { runtimeRunRepository } from '@/lib/runtime/runtime-run-repository';
 
 const globalBootstrap = globalThis as typeof globalThis & {
-  __routeShiftDemoBootstrap?: Promise<void>;
+  __routeShiftDemoBootstrap?: Map<string, Promise<void>>;
 };
 
-export async function ensureDemoRuns() {
-  const existingLabels = new Set(runStore.listRuns().map((run) => run.label));
+export async function ensureDemoRuns(sessionId: string) {
+  const existingLabels = new Set((await runtimeRunRepository.listRuns(sessionId)).map((run) => run.label));
   if (demoRunPresets.every((preset) => existingLabels.has(preset.name))) return;
 
-  globalBootstrap.__routeShiftDemoBootstrap ??= (async () => {
-    const existingLabels = new Set(runStore.listRuns().map((run) => run.label));
+  globalBootstrap.__routeShiftDemoBootstrap ??= new Map();
+  const bootstraps = globalBootstrap.__routeShiftDemoBootstrap;
+  const bootstrap = bootstraps.get(sessionId) ?? (async () => {
+    const existingLabels = new Set((await runtimeRunRepository.listRuns(sessionId)).map((run) => run.label));
     for (const preset of demoRunPresets) {
       if (!existingLabels.has(preset.name)) {
-        await runStore.createRun({ demoId: preset.id });
+        await runtimeRunRepository.createRun({ demoId: preset.id, bootstrapId: preset.id }, sessionId);
       }
     }
   })();
+  bootstraps.set(sessionId, bootstrap);
   try {
-    await globalBootstrap.__routeShiftDemoBootstrap;
+    await bootstrap;
   } finally {
-    globalBootstrap.__routeShiftDemoBootstrap = undefined;
+    bootstraps.delete(sessionId);
   }
 }
 

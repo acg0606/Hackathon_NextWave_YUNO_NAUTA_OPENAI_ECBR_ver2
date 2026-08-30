@@ -1,9 +1,10 @@
 import { z } from 'zod';
 
 import { inferFlowMutationWithTelemetry } from '@/lib/runtime/infer-step-semantics';
-import { runStore } from '@/lib/runtime/run-store';
+import { runtimeRunRepository } from '@/lib/runtime/runtime-run-repository';
 import { flowMutationSchema } from '@/lib/runtime/schemas';
 import { contextRunId, errorResponse, readJson, runResponse } from '../../_shared';
+import { attachRuntimeSession, runtimeSession } from '../../_session';
 
 type Context = { params: Promise<{ runId: string }> | { runId: string } };
 
@@ -15,6 +16,7 @@ const instructionSchema = z
   .strict();
 
 export async function POST(request: Request, context: Context) {
+  const session = runtimeSession(request);
   try {
     const runId = await contextRunId(context);
     const raw = await readJson(request);
@@ -23,8 +25,8 @@ export async function POST(request: Request, context: Context) {
       ? await inferFlowMutationWithTelemetry(instruction.data)
       : null;
     const mutation = inferred?.mutation ?? flowMutationSchema.parse(raw);
-    const run = await runStore.mutateFlow(runId, mutation);
-    return Response.json({
+    const run = await runtimeRunRepository.mutateFlow(runId, mutation, session.sessionId);
+    return attachRuntimeSession(Response.json({
       ...runResponse(run),
       mutation: {
         operation: mutation.operation,
@@ -37,8 +39,9 @@ export async function POST(request: Request, context: Context) {
         providerMode: 'deterministic_fallback',
         structuredOutput: false,
       },
-    });
+      persistence: await runtimeRunRepository.persistence(),
+    }), session.setCookie);
   } catch (error) {
-    return errorResponse(error);
+    return attachRuntimeSession(errorResponse(error), session.setCookie);
   }
 }

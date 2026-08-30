@@ -1,5 +1,11 @@
 const baseUrl = (process.env.ROUTESHIFT_BASE_URL || 'http://localhost:4388').replace(/\/$/, '');
 const instruction = 'Validate Bill of Lading against booking before confirming.';
+let sessionCookie = '';
+
+function retainSession(response) {
+  const setCookie = response.headers.get('set-cookie');
+  if (setCookie) sessionCookie = setCookie.split(';', 1)[0];
+}
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -10,10 +16,12 @@ async function api(path, options = {}) {
     ...options,
     headers: {
       accept: 'application/json',
+      ...(sessionCookie ? { cookie: sessionCookie } : {}),
       ...(options.body ? { 'content-type': 'application/json' } : {}),
       ...options.headers,
     },
   });
+  retainSession(response);
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(`${options.method || 'GET'} ${path} returned ${response.status}: ${JSON.stringify(body)}`);
@@ -31,9 +39,11 @@ async function connectEventStream(runId, afterSequence) {
     headers: {
       accept: 'text/event-stream',
       'last-event-id': String(afterSequence),
+      ...(sessionCookie ? { cookie: sessionCookie } : {}),
     },
     signal: controller.signal,
   });
+  retainSession(response);
   assert(response.ok && response.body, `Could not connect to the SSE stream for ${runId}.`);
 
   const events = [];

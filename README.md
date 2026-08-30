@@ -107,7 +107,8 @@ NASA EONET, AISStream, and ADSB.lol provide current context; none proves that a 
 
 ## Honest limitations
 
-- The run store is process-local and non-durable. D1 and R2 are not configured.
+- Hosted runs use Sites-managed D1, are isolated by an opaque HttpOnly browser-session cookie, and survive stateless Worker changes. Explicit Node previews retain the in-memory adapter; R2 is not configured.
+- The D1 adapter is optimized for the hackathon demonstration, not long-term account history: it stores a bounded run record, uses a short per-run mutation lease, and polls for cross-instance SSE updates.
 - Nauta operations and shipment-to-vehicle correlation remain deterministic mocks until sponsor access is available.
 - Yuno external behavior is Sandbox-only and requires Test Mode credentials plus checkout/routing configuration; production money movement is out of scope.
 - AIS/ADS-B observations are current traffic context, not proof that the demo cargo is aboard a displayed vessel or aircraft.

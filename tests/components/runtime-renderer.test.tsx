@@ -74,6 +74,9 @@ describe('RuntimeRenderer', () => {
     expect(screen.getByText('TRMER')).toBeTruthy();
     expect(screen.getByText('18,240')).toBeTruthy();
     expect(screen.getByText('19,050')).toBeTruthy();
+    expect(document.activeElement).toBe(
+      document.querySelector('[data-section-id="comparison"]'),
+    );
 
     fireEvent.click(
       screen.getByRole('button', { name: 'Request corrected B/L' }),
@@ -121,6 +124,9 @@ describe('RuntimeRenderer', () => {
     ).toBeNull();
     expect(screen.queryByText('Booking versus Bill of Lading')).toBeNull();
     expect(screen.getByText('Corrected Bill of Lading accepted')).toBeTruthy();
+    expect(document.activeElement).toBe(
+      document.querySelector('[data-section-id="result"]'),
+    );
   });
 
   it('renders only canonical allowlisted evidence links', () => {

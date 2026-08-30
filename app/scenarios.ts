@@ -24,6 +24,7 @@ export type Scenario = {
   headline: string;
   year: string;
   date: string;
+  eventStartDate: string;
   category: string;
   place: string;
   coordinates: [number, number];
@@ -50,7 +51,7 @@ export type Scenario = {
   provenance: ScenarioProvenance;
 };
 
-type ScenarioFixture = Omit<Scenario, 'provenance'>;
+type ScenarioFixture = Omit<Scenario, 'provenance' | 'eventStartDate'>;
 
 const scenarioFixtures: ScenarioFixture[] = [
   {
@@ -592,16 +593,32 @@ const englishScenarioCopy: Record<
   },
 };
 
+const canonicalEventStartDates: Record<string, string> = {
+  'EVT-012': '2024-07-19',
+  'EVT-014': '2023-02-06',
+  'EVT-017': '2017-06-27',
+  'EVT-001': '2021-03-23',
+  'EVT-005': '2024-03-26',
+  'EVT-004': '2023-08-01',
+  'EVT-008': '2024-04-16',
+  'EVT-009': '2021-11-14',
+  'EVT-011': '2024-08-22',
+  'EVT-010': '2024-10-01',
+};
+
 export const scenarios: Scenario[] = scenarioFixtures.map((scenario) => {
   const copy = englishScenarioCopy[scenario.id];
   const translated = { ...scenario, ...copy };
+  const eventStartDate = canonicalEventStartDates[scenario.id];
+  if (!eventStartDate) throw new Error(`Scenario ${scenario.id} is missing its canonical event start date.`);
 
   return {
     ...translated,
+    eventStartDate,
     provenance: {
       sourceTitle: translated.sourceLabel,
       sourceUrl: translated.sourceUrl,
-      eventDate: translated.date,
+      eventDate: eventStartDate,
       publicationDate: 'UNKNOWN',
       retrievedDate: 'UNKNOWN',
       confidence: 'MEDIUM',
